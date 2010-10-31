@@ -10,6 +10,11 @@
  * Link with the appropriate TERMINFO or TERMCAP library.
  */
 
+/* Hacked by Bjorn Victor, November 2010, to add function declarations
+   to make it compile/run in some more environments.
+   Hacked by Bjorn Victor, 2004-2005, to support termios (Linux) and location setting.
+*/
+
 /* Hacked by Klotz 2/20/89 to remove +%TDORS from init string.
  * Hacked by Klotz 12/19/88 added response to TDORS.
  * Hacked by Mly 9-Jul-87 to improve reading of supdup escape commands
@@ -24,11 +29,22 @@
  *  Try multiple other host addresses if first fails.
  */
 
+#ifndef USE_TERMIOS
+#define USE_TERMIOS 1		/* e.g. Linux */
+#endif
+#ifndef USE_BSD_SELECT
+#define USE_BSD_SELECT 0	/* not e.g. Linux */
+#endif
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 
 #include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include <unistd.h>
+#include <stdlib.h>
 
 #include <stdio.h>
 #include <ctype.h>
@@ -45,7 +61,12 @@
 #endif /* TERMINFO */
 
 #ifdef	TERMCAP
+#if !USE_TERMIOS
 #include <sys/ioctl_compat.h>	/* Kludge assumption: BSDish system */
+#else
+#include <termios.h>
+#include <unistd.h>
+#endif
 
 extern char *tgetstr();
 
@@ -68,6 +89,8 @@ unsigned char myopts[256];
 
 
 int connected = 0;
+
+char myloc[128];
 
 /* fd of network connection */
 int net;
@@ -101,9 +124,13 @@ extern int errno;
 /* Impoverished un*x keyboards */
 #define Ctl(c) ((c)&037)
 
-int sd (), quit (), rlogout (), suspend (), help ();
-int setescape (), status ();
-int top ();
+int sd ();
+void suspend (), help (), quit (), rlogout (), suprcv();
+void command(unsigned char c), do_setloc(char *c);
+void netflush(int d);
+void setescape ();
+void top (), status();
+void setloc ();			/* [BV] */
 #if 0
 int setcrmod (), setdebug (), setoptions ();
 #endif /* 0 */
@@ -112,7 +139,7 @@ struct cmd
  {
    unsigned char name;          /* command name */
    char *help;                  /* help string */
-   int (*handler)();            /* routine which executes command */
+   void (*handler)();            /* routine which executes command */
  };
 
 struct cmd cmdtab[] =
@@ -125,6 +152,7 @@ struct cmd cmdtab[] =
     { 'e',	"set escape character",	setescape },
     { 't',	"set \"top\" bit on next character", top },
     { 's',	"print status information", status },
+    { 'L',	"set console location", setloc }, /* [BV] */
     /* also c-h */
     { '?',	"print help information", help },
 #if 0
@@ -139,17 +167,27 @@ int currcol, currline;	/* Current cursor position */
 
 struct sockaddr_in tsin;
 
+static void zap();
+void sup_term();
+void supdup (char *loc);
 void	intr(int), deadpeer(int);
 char	*key_name ();
 struct	cmd *getcmd ();
 struct	servent *sp;
 
+#if !USE_TERMIOS
 struct	tchars otc;
 struct	ltchars oltc;
 struct	sgttyb ottyb;
+#else
+struct termios otio;
+#endif
 
+int mode(), systgetent();
+int tgetnum(), tgetflag(), tgetent();
+void ttyoflush(), tputs();
 
-putch (c)
+void putch (c)
      register int c;
 {
   *ttyfrontp++ = c;
@@ -157,7 +195,7 @@ putch (c)
 }
 
 
-put_newline ()
+void put_newline ()
 {
 #ifdef	TERMINFO
   if (newline)
@@ -220,19 +258,26 @@ get_host (name)
     }
 }
 
+int
 main (argc, argv)
      int argc;
      char *argv[];
 {
+  myloc[0] = '\0';
+
   sp = getservbyname ("supdup", "tcp");
   if (sp == 0)
     {
       fprintf (stderr, "supdup: tcp/supdup: unknown service.\n");
       exit (1);
     }
+#if !USE_TERMIOS
   ioctl (0, TIOCGETP, (char *) &ottyb);
   ioctl (0, TIOCGETC, (char *) &otc);
   ioctl (0, TIOCGLTC, (char *) &oltc);
+#else
+  tcgetattr(0, &otio);
+#endif
   setbuf (stdin, 0);
   setbuf (stdout, 0);
   do_losingly_scroll = 0;
@@ -273,6 +318,17 @@ main (argc, argv)
           exit (1);
         }
     }
+  if (argc > 1 && !strcmp(argv[1], "-loc"))
+    {
+      argv++, argc--;
+      if (argc > 1) {
+	strncpy(myloc, argv[1], sizeof(myloc));
+	argv++, argc--;
+      } else {
+	fprintf(stderr, "-loc requires an argument\n");
+	exit(1);
+      }
+    }
 
   if (argc == 1)
     {
@@ -301,15 +357,15 @@ main (argc, argv)
     }
   else if (argc > 3)
     {
-      printf ("usage: %s host-name [port] [-scroll]\n", argv[0]);
-      return;
+      fprintf(stderr,"usage: %s host-name [port] [-scroll]\n", argv[0]);
+      exit(1);
     }
   else
     {
       get_host (argv[1]);
       if (!hostname)
         {
-          printf ("%s: unknown host.\n", argv[1]);
+          fprintf(stderr,"%s: unknown host.\n", argv[1]);
           exit (1);
         }
     }
@@ -320,8 +376,8 @@ main (argc, argv)
       tsin.sin_port = atoi (argv[2]);
       if (tsin.sin_port <= 0)
         {
-          printf ("%s: bad port number.\n", argv[2]);
-          return;
+          fprintf(stderr,"%s: bad port number.\n", argv[2]);
+          exit(1);
         }
       tsin.sin_port = htons (tsin.sin_port);
     }
@@ -330,7 +386,7 @@ main (argc, argv)
   if (net < 0)
     {
       perror ("supdup: socket");
-      return;
+      exit(1);
     }
   outstring = (unsigned char *) malloc (OUTSTRING_BUFSIZ);
   if (outstring == 0)
@@ -350,7 +406,7 @@ main (argc, argv)
     {
       perror ("supdup: connect");
       signal (SIGINT, SIG_DFL);
-      return;
+      exit(1);
     }
   connected = 1;
   printf ("Connected to %s.\n", hostname);
@@ -361,7 +417,7 @@ main (argc, argv)
     tputs (clr_eos, lines - currline, putch);
   put_newline ();
   if (setjmp (peerdied) == 0)
-    supdup (net);
+    supdup (myloc);
   ttyoflush ();
   (void) mode (0);
   fprintf (stderr, "Connection closed by %s.\n", hostname);
@@ -392,6 +448,7 @@ static char inits[] =
  * Initialize the terminal description to be sent when the connection is
  * opened.
  */
+void
 sup_term ()
 {
 #ifdef TERMINFO
@@ -410,7 +467,6 @@ sup_term ()
     }
 #endif /* TERMINFO */
 #ifdef TERMCAP
-  static void zap();
   static char bp[2000];
 
   switch (systgetent (bp))
@@ -445,7 +501,7 @@ sup_term ()
  *  }
  */
  
-  if (do_losingly_scroll)
+  if (do_losingly_scroll) {
     if (no_scroll && !SF)
       {
         fprintf (stderr, "(Terminal won't scroll.  Hah!!)\n");
@@ -453,6 +509,7 @@ sup_term ()
       }
     else
       inits[13] |= 01;
+  }
 
   inits[23] = lines & 077;
   inits[22] = (lines >> 6) & 077;
@@ -490,9 +547,6 @@ sup_term ()
 #ifdef	TERMCAP
 static void zap ()
 {
-  unsigned char *fp, **sp;
-  char *namp;
-  int *np;
     int i;
     struct tcent *tc = tcaptab;
 
@@ -539,6 +593,7 @@ static void zap ()
 
 extern char *getenv ();
 
+int
 systgetent (bp)
      char *bp;
 {
@@ -551,32 +606,52 @@ systgetent (bp)
 }
 #endif /* TERMCAP */
 
+#if !USE_TERMIOS
 struct	tchars notc =	{ -1, -1, -1, -1, -1, -1 };
 struct	ltchars noltc =	{ -1, -1, -1, -1, -1, -1 };
+#endif
 
+int
 mode (f)
      register int f;
 {
   static int prevmode = 0;
+#if !USE_TERMIOS
   struct tchars *tc;
   struct ltchars *ltc;
   struct sgttyb sb;
+#else
+  struct termios ntio;
+#endif
   int onoff, old;
 
   if (prevmode == f)
     return (f);
   old = prevmode;
   prevmode = f;
+  if (!f) {			/* BV: restore screen */
+    if ((TI) && (TE)) {
+      tputs(TE, 0, putch);
+      ttyoflush();
+    }
+  }
+#if !USE_TERMIOS
   sb = ottyb;
+#else
+  memcpy(&ntio,&otio,sizeof(ntio));
+#endif
   switch (f)
     {
     case 0:
       onoff = 0;
+#if !USE_TERMIOS
       tc = &otc;
       ltc = &oltc;
+#endif
       break;
 
     default:
+#if !USE_TERMIOS
       sb.sg_flags |= RAW;       /* was CBREAK */
       sb.sg_flags &= ~(ECHO|CRMOD);
       sb.sg_flags |= LITOUT;
@@ -586,14 +661,27 @@ mode (f)
       sb.sg_erase = sb.sg_kill = -1;
       tc = &notc;
       ltc = &noltc;
+#else
+      cfmakeraw(&ntio);
+#endif
       onoff = 1;
       break;
     }
+#if !USE_TERMIOS
   ioctl (fileno (stdin), TIOCSLTC, (char *) ltc);
   ioctl (fileno (stdin), TIOCSETC, (char *) tc);
   ioctl (fileno (stdin), TIOCSETP, (char *) &sb);
+#else
+  tcsetattr(fileno(stdin), TCSANOW, &ntio);
+#endif
   ioctl (fileno (stdin), FIONBIO, &onoff);
   ioctl (fileno (stdout), FIONBIO, &onoff);
+  if (f) {			/* BV: use alternate screen buffer */
+    if ((TI) && (TE)) {
+      tputs(TI, 0, putch);
+      ttyoflush();
+    }
+  }
   return (old);
 }
 
@@ -641,7 +729,11 @@ clear_bottom_line ()
 int
 read_char ()
 {
+#if USE_BSD_SELECT
   int readfds;
+#else
+  fd_set readfds;
+#endif
 
   while (1)
     {
@@ -654,8 +746,13 @@ read_char ()
         }
       else
 	{
+#if USE_BSD_SELECT
 	  readfds = 1 << fileno (stdin);
 	  select(32, &readfds, 0, 0, 0, 0);
+#else
+	  FD_SET(fileno(stdin),&readfds);
+	  select(fileno(stdin)+1, &readfds, 0, 0, 0);
+#endif
         }
     }
 }
@@ -664,16 +761,24 @@ read_char ()
 /*
  * Select from tty and network...
  */
-supdup ()
+void
+supdup (loc)
+     char *loc;
 {
   register int c;
   int tin = fileno (stdin), tout = fileno (stdout);
   int on = 1;
+#if !USE_BSD_SELECT
+  fd_set ibits, obits;
+#endif
 
   ioctl (net, FIONBIO, &on);
 
   for (c = 0; c < INIT_LEN;)
     *netfrontp++ = inits[c++];
+  /* [BV] AFTER inits! */
+  if (*loc != '\0')
+    do_setloc(loc);
 
 #ifdef TERMCAP
   if (VS) tputs (VS, 0, putch);
@@ -683,37 +788,84 @@ supdup ()
   escape_seen = 0;
   for (;;)
     {
+#if USE_BSD_SELECT
       int ibits = 0, obits = 0;
+#else
+      FD_ZERO(&ibits); FD_ZERO(&obits);
+#endif
 
       if (netfrontp != netobuf)
+#if USE_BSD_SELECT
         obits |= (1 << net);
+#else
+        FD_SET(net, &obits);
+#endif
       else
+#if USE_BSD_SELECT
         ibits |= (1 << tin);
+#else
+        FD_SET(tin, &ibits);
+#endif
       if (ttyfrontp != ttyobuf)
+#if USE_BSD_SELECT
         obits |= (1 << tout);
+#else
+        FD_SET(tout, &obits);
+#endif
       else
+#if USE_BSD_SELECT
         ibits |= (1 << net);
+#else
+        FD_SET(net, &ibits);
+#endif
       if (scc < 0 && tcc < 0)
         break;
+#if USE_BSD_SELECT
       select (16, &ibits, &obits, 0, 0);
       if (ibits == 0 && obits == 0)
-        {
+	{
           sleep (5);
           continue;
         }
+#else
+      {
+	int nfds = 0;
+	struct timeval tmo = { 60, 0 };	/* sleep max one minute */
+	nfds = select(16, &ibits, &obits, 0, &tmo);
+	if (nfds < 0)
+	{
+	  perror("select");
+          sleep (5);		/* nice error handling? */
+          continue;
+        } else if (nfds == 0) {
+	  /* dummy command just to avoid timeout at other end */
+	  /* #### not very friendly to the ITS - better fix that end */
+	  *netfrontp++ = SUPDUP_ESCAPE;
+	  *netfrontp++ = SUPDUP_LOCATION+040;
+	  netflush(0);
+	  continue;
+	}
+      }
+#endif
 
       /*
        * Something to read from the network...
        */
+#if USE_BSD_SELECT
       if ((escape_seen == 0) && (ibits & (1 << net)))
+#else
+      if ((escape_seen == 0) && (FD_ISSET(net, &ibits)))
+#endif
         {
           scc = read (net, sibuf, sizeof (sibuf));
           if (scc < 0 && errno == EWOULDBLOCK)
             scc = 0;
           else
             {
-              if (scc <= 0)
+              if (scc <= 0) {
+		if (scc < 0) perror("read from net failed");
                 break;
+	      }
               sbp = sibuf;
               if (indebug_file)
                 fwrite(sibuf, scc, 1, indebug_file);
@@ -723,15 +875,21 @@ supdup ()
       /*
        * Something to read from the tty...
        */
+#if USE_BSD_SELECT
       if (ibits & (1 << tin))
+#else
+      if (FD_ISSET(tin, &ibits))
+#endif
         {
           tcc = read (tin, tibuf, sizeof (tibuf));
           if (tcc < 0 && errno == EWOULDBLOCK)
             tcc = 0;
           else
             {
-              if (tcc <= 0)
+              if (tcc <= 0) {
+		if (tcc < 0) perror("read from terminal failed");
                 break;
+	      }
               tbp = tibuf;
             }
         }
@@ -802,16 +960,25 @@ supdup ()
             }
           *netfrontp++ = c;
         }
+#if USE_BSD_SELECT
       if ((obits & (1 << net)) && (netfrontp != netobuf))
+#else
+      if (FD_ISSET(net, &obits) && (netfrontp != netobuf))
+#endif
         netflush (0);
       if (scc > 0)
         suprcv ();
+#if USE_BSD_SELECT
       if ((obits & (1 << tout)) && (ttyfrontp != ttyobuf))
+#else
+      if (FD_ISSET(tout, &obits) && (ttyfrontp != ttyobuf))
+#endif
         ttyoflush ();
     }
 }
 
 
+void
 command (chr)
      unsigned char chr;
 {
@@ -859,6 +1026,7 @@ command (chr)
   return;
 }
 
+void
 status ()
 {
   if (cursor_address)
@@ -873,12 +1041,28 @@ status ()
     printf ("Connected to %s.", hostname);
   else
     printf ("No connection.");
+  /* [BV] show location */
+  if (myloc[0] != '\0')
+    printf(" (Console location: \"%s\")", myloc);
   ttyoflush ();
   put_newline ();
   printf ("Escape character is \"%s\".", key_name (escape_char));
   ttyoflush ();
+  /* eat space, or unread others */
+  {
+    register int c;
+    c = read_char ();
+    restore ();
+    if (c < 0)
+      return;
+    if (c == ' ')
+      return;
+    /* unread-char */
+    tibuf[0] = c; tcc = 1; tbp = tibuf;
+  }
 }
 
+void
 suspend ()
 {
   register int save;
@@ -898,9 +1082,13 @@ suspend ()
     putchar ('\n');
   kill (0, SIGTSTP);
   /* reget parameters in case they were changed */
+#if !USE_TERMIOS
   ioctl (0, TIOCGETP, (char *) &ottyb);
   ioctl (0, TIOCGETC, (char *) &otc);
   ioctl (0, TIOCGLTC, (char *) &oltc);
+#else
+  tcsetattr(0, TCSANOW, &otio);
+#endif
   (void) mode (save);
 #ifdef TERMCAP
   if (VS) tputs (VS, 0, putch);
@@ -913,6 +1101,7 @@ suspend ()
 /*
  * Help command.
  */
+void
 help ()
 {
   register struct cmd *c;
@@ -962,6 +1151,63 @@ help ()
   return;
 }
 
+/* [BV] send "set console location" (see rfc734) */
+void
+do_setloc(loc)
+     char *loc;
+{
+  *netfrontp++ = SUPDUP_ESCAPE;
+  *netfrontp++ = SUPDUP_LOCATION;
+  while (*loc != '\0' && *loc != '\r' && *loc != '\n')
+    *netfrontp++ = *loc++;
+  *netfrontp++ = '\0';
+}
+
+/* [BV] set location command */
+/* This turns out to be of limited use, since TELSER in ITS doesn't null-terminate
+   the sent string; thus you can only make it longer.  Use :TTLOC in ITS instead. */
+void
+setloc()
+{
+  char c, loc[128];
+  int i;
+
+  clear_bottom_line();
+  tcc = 0;
+  if (myloc[0] != '\0')
+    fprintf(stdout,"Set console location (currently \"%s\"): ",myloc);
+  else
+    fprintf(stdout,"Set console location: ");
+  ttyoflush();
+  for (i = 0; i < sizeof(loc); i++) {
+    c = read_char();
+    if (c == Ctl ('g')) {	/* abort */
+      restore ();
+      return;
+    }
+    if (c == '\177' && i > 0) {
+      loc[--i] = '\0';
+      if (0 && delete_character) { /* I don't know what I'm doing here */
+	tputs(delete_character, 1, putch);
+	ttyoflush();
+      } else {
+	fputs("\b \b",stdout);	/* "works" */
+      }
+      continue;
+    }
+    if (c == '\n' || c == '\r')	/* done */
+      break;
+    loc[i] = c;
+    fputc(c,stdout);		/* echo */
+  }
+  loc[i] = '\0';		/* terminate */
+  do_setloc(loc);
+  netflush(1);
+  strcpy(myloc,loc);		/* save */
+  restore();    
+}
+
+void
 punt (logout_p)
      int logout_p;
 {
@@ -1013,11 +1259,13 @@ punt (logout_p)
   exit (0);
 }
 
+void
 quit ()
 {
   punt (0);
 }
 
+void
 rlogout ()
 {
   punt (1);
@@ -1038,6 +1286,7 @@ rlogout ()
 #define	SR_IC		8
 #define	SR_DC		9
 
+void
 suprcv ()
 {
   register int c;
@@ -1300,6 +1549,7 @@ suprcv ()
     }
 }
 
+void
 ttyoflush ()
 {
   int n;
@@ -1331,6 +1581,7 @@ ttyoflush ()
   ttyfrontp = ttyobuf;
 }
 
+void
 netflush (dont_die)
      int dont_die;
 {
@@ -1436,6 +1687,7 @@ void intr (int sig)
   exit (1);
 }
 
+void
 top ()
 {
   high_bits |= 020;
@@ -1445,6 +1697,7 @@ top ()
 /*
  * Set the escape character.
  */
+void
 setescape ()
 {
   clear_bottom_line ();
@@ -1685,6 +1938,11 @@ tparam1 (string, outstring, len, up, left, argp)
 	      argp[1] ++;	/* Increment the following arg, too!  */
 	      break;
 
+	    case 'p':		/* %p means push nth arg. */
+	      tem = *p++ - '1';
+	      argp = oargp + tem;
+	      break;	
+	      
 	    case '%':		/* %% means output %; no arg. */
 	      goto ordinary;
 
