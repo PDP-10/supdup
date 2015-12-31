@@ -346,7 +346,7 @@ main (argc, argv)
             }
           goto again;
         }
-      if (cp = strchr(line, '\n'))
+      if ((cp = strchr(line, '\n')))
 	*cp = '\0';
       get_host (line);
       if (!hostname)
@@ -599,7 +599,7 @@ systgetent (bp)
 {
   register char *term;
 
-  if (term = getenv ("TERM"))
+  if ((term = getenv ("TERM")))
     return tgetent (bp, term);
   else
     return 0;
