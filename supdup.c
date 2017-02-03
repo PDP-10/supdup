@@ -15,6 +15,11 @@
    Hacked by Bjorn Victor, 2004-2005, to support termios (Linux) and location setting.
 */
 
+/* Hacked by Wojciech Gac, January 2015
+   Added #ifdef __OpenBSD__ conditions to use strlcpy() when possible.
+   This rids us of the compiler complaints on OpenBSD.
+*/
+
 /* Hacked by Klotz 2/20/89 to remove +%TDORS from init string.
  * Hacked by Klotz 12/19/88 added response to TDORS.
  * Hacked by Mly 9-Jul-87 to improve reading of supdup escape commands
@@ -66,6 +71,11 @@
 #else
 #include <termios.h>
 #include <unistd.h>
+#endif
+
+#ifdef __NetBSD__
+#include <sys/time.h>
+#include <sys/select.h>
 #endif
 
 extern char *tgetstr();
@@ -322,7 +332,11 @@ main (argc, argv)
     {
       argv++, argc--;
       if (argc > 1) {
+#ifdef __OpenBSD__
+	strlcpy(myloc, argv[1], sizeof(myloc));
+#else
 	strncpy(myloc, argv[1], sizeof(myloc));
+#endif /* __OpenBSD__ */
 	argv++, argc--;
       } else {
 	fprintf(stderr, "-loc requires an argument\n");
@@ -1203,7 +1217,11 @@ setloc()
   loc[i] = '\0';		/* terminate */
   do_setloc(loc);
   netflush(1);
+#ifdef __OpenBSD__
+  strlcpy(myloc,loc, sizeof(myloc));		/* save */
+#else
   strcpy(myloc,loc);		/* save */
+#endif /* __OpenBSD__ */
   restore();    
 }
 
@@ -1971,11 +1989,19 @@ tparam1 (string, outstring, len, up, left, argp)
 	*op++ = c;
     }
   *op = 0;
+#ifdef __OpenBSD__
+  if (doleft)
+    strlcpy (op, doleft, sizeof(op));
+  if (doup)
+    strlcpy (op, doup, sizeof(op));
+  return outstring;
+#else
   if (doleft)
     strcpy (op, doleft);
   if (doup)
     strcpy (op, doup);
   return outstring;
+#endif /* __OpenBSD__ */
 }
 #endif /* TERMCAP */
 
