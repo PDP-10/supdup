@@ -1,0 +1,119 @@
+
+NWG/RFC# 736                                  MRC 31-OCT-77 23:28  42213
+Telnet SUPDUP Option
+
+
+
+Network Working Group                                       Mark Crispin
+Request for Comments 736                                           SU-AI
+NIC 42213                                                31 October 1977
+
+                          TELNET SUPDUP Option
+
+1.  Command name and code.
+
+   SUPDUP               21
+
+2.  Command meanings.
+
+   IAC WILL SUPDUP
+
+      The sender of this command  REQUESTS permission to, or  confirms
+      that it will, use the SUPDUP display protocol
+
+   IAC WON'T SUPDUP
+
+      The sender of this command REFUSES to use the SUPDUP protocol.
+
+   IAC DO SUPDUP
+
+      The sender of this  command REQUESTS that  the receiver use,  or
+      grants the receiver permission to use, the SUPDUP protocol.
+
+   IAC DON'T
+
+      The sender of this command DEMANDS that the receiver not use the
+      SUPDUP protocol.
+
+3.  Default.
+
+   WON'T SUPDUP
+
+   DON'T SUPDUP
+
+   i.e., the SUPDUP display protocol is not in use.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Mark Crispin                                                       [page 1]
+
+
+NWG/RFC# 736                                  MRC 31-OCT-77 23:28  42213
+Telnet SUPDUP Option
+
+
+4.  Motivation for the option.
+
+   Since the publication of RFC 734,  I have been requested to  design
+   an option to  the TELNET  protocol to provide  for SUPDUP  service.
+   This option allows a host to  provide SUPDUP service on the  normal
+   TELNET socket (27 octal) instead of 137 (octal) which is the normal
+   SUPDUP ICP socket.
+
+5.  Description of the option.
+
+   A user  TELNET  program which  wishes  to use  the  SUPDUP  display
+   protocol instead of the NVT terminal service should send an IAC  DO
+   SUPDUP.  If  the  server  is  willing to  use  the  SUPDUP  display
+   protocol, it  should respond  with IAC  WILL SUPDUP;  otherwise  it
+   should refuse with IAC WONT SUPDUP.
+
+   For hosts  which normally  provide  SUPDUP terminal  services,  the
+   server can send IAC  WILL SUPDUP upon ICP  which the user may  then
+   accept or refuse.
+
+   If the SUPDUP option is  in effect, no further TELNET  negotiations
+   are allowed.   They  are  meaningless, since  SUPDUP  has  its  own
+   facilities to perform  the functions that are needed.  Hence, octal
+   377 will become an ordinary transmitted character (in this case  an
+   invalid %TD code) instead of an IAC.
+
+   Following the mutual  acceptance of the  SUPDUP option, the  SUPDUP
+   negotiation proceeds as described in RFC 734.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Mark Crispin                                                       [page 2]
