@@ -11,7 +11,7 @@
 PREFIX ?= /usr/local
 
 supdup: supdup.c termcaps.h
-	cc -g -o supdup -DTERMCAP supdup.c -ltermcap
+	cc -DTERMINFO -g -o supdup supdup.c -lncurses
 
 install: supdup
 	install -m 0755 supdup ${PREFIX}/bin
