@@ -62,6 +62,7 @@
 #include "supdup.h"
 
 #ifdef TERMINFO
+#include <curses.h>
 #include <term.h>
 #endif /* TERMINFO */
 
@@ -84,11 +85,11 @@ extern char *tgetstr();
 
 static char tspace[2048], *aoftspace;
 
-#define OUTSTRING_BUFSIZ 2048
-unsigned char *outstring;
-
 unsigned char *tparam(), *tgoto();
 #endif /* TERMCAP */
+
+#define OUTSTRING_BUFSIZ 2048
+unsigned char *outstring;
 
 #define TBUFSIZ 1024
 unsigned char ttyobuf[TBUFSIZ], *ttyfrontp = ttyobuf;
@@ -193,15 +194,14 @@ struct	sgttyb ottyb;
 struct termios otio;
 #endif
 
-int mode(), systgetent();
-int tgetnum(), tgetflag(), tgetent();
-void ttyoflush(), tputs();
+int mode(int);
+void ttyoflush(void);
 
-void putch (c)
-     register int c;
+int putch (int c)
 {
   *ttyfrontp++ = c;
   /*>>>>> LOSES if overflows */
+  return 1;
 }
 
 
@@ -426,14 +426,14 @@ main (argc, argv)
   printf ("Connected to %s.\n", hostname);
   printf ("Escape character is \"%s\".", key_name (escape_char));
   fflush (stdout);
-  (void) mode (1);
+  mode (1);
   if (clr_eos)
     tputs (clr_eos, lines - currline, putch);
   put_newline ();
   if (setjmp (peerdied) == 0)
     supdup (myloc);
   ttyoflush ();
-  (void) mode (0);
+  mode (0);
   fprintf (stderr, "Connection closed by %s.\n", hostname);
   exit (0);
 }
@@ -516,12 +516,6 @@ sup_term ()
  */
  
   if (do_losingly_scroll) {
-    if (no_scroll && !SF)
-      {
-        fprintf (stderr, "(Terminal won't scroll.  Hah!!)\n");
-        do_losingly_scroll = 0;
-      }
-    else
       inits[13] |= 01;
   }
 
@@ -543,7 +537,7 @@ sup_term ()
   if (clr_eol)		inits[12] |= 04;
   if (over_strike)	inits[13] |= 010;
   if (cursor_address)	inits[13] |= 04;
-  if (has_meta_key || also_has_meta_key)
+  if (has_meta_key)
     {
       /* %TOFCI */
 /* Don't do this -- it implies that we can generate full MIT 12-bit */
@@ -626,8 +620,7 @@ struct	ltchars noltc =	{ -1, -1, -1, -1, -1, -1 };
 #endif
 
 int
-mode (f)
-     register int f;
+mode (int f)
 {
   static int prevmode = 0;
 #if !USE_TERMIOS
@@ -643,12 +636,6 @@ mode (f)
     return (f);
   old = prevmode;
   prevmode = f;
-  if (!f) {			/* BV: restore screen */
-    if ((TI) && (TE)) {
-      tputs(TE, 0, putch);
-      ttyoflush();
-    }
-  }
 #if !USE_TERMIOS
   sb = ottyb;
 #else
@@ -690,12 +677,6 @@ mode (f)
 #endif
   ioctl (fileno (stdin), FIONBIO, &onoff);
   ioctl (fileno (stdout), FIONBIO, &onoff);
-  if (f) {			/* BV: use alternate screen buffer */
-    if ((TI) && (TE)) {
-      tputs(TI, 0, putch);
-      ttyoflush();
-    }
-  }
   return (old);
 }
 
@@ -727,13 +708,10 @@ restore ()
 void
 clear_bottom_line ()
 {
-  if (LL || cursor_address)
+  if (cursor_address)
     {
       currcol = 0; currline = lines - 1;
-      if (LL)
-        tputs (LL, 1, putch);
-      else
-        term_goto (currcol, currline);
+      term_goto (currcol, currline);
       if (clr_eol)
         tputs (clr_eol, columns, putch);
     }
@@ -1358,8 +1336,6 @@ suprcv ()
                 currcol = 0;
               else if (cursor_left)
                 tputs (cursor_left, 0, putch);
-              else if (BS)
-                putch ('\b');
               else if (cursor_address)
                 term_goto (currcol, currline);
               continue;
@@ -1568,7 +1544,7 @@ suprcv ()
 }
 
 void
-ttyoflush ()
+ttyoflush (void)
 {
   int n;
   unsigned char *back = ttyobuf;
