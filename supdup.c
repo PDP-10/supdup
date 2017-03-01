@@ -96,10 +96,6 @@ unsigned char escape_char = ('^'&037);
 /* As opposed to winningly-wrap */
 int do_losingly_scroll = 0;
 
-#if 0 /* brain death */
-int crmod = 0;
-#endif /* 0 */
-
 /* jmp_buf toplevel; */
 jmp_buf	peerdied;
 
@@ -1170,6 +1166,8 @@ suprcv (void)
   while (scc > 0)
     {
       c = *sbp++ & 0377; scc--;
+//      if(c>=0&&c<128)
+//        printf("State: %d, Incoming: %d. Translation: %s\n", state, c, charmap[c].name);
       switch (state)
         {
         case SR_DATA:
@@ -1178,7 +1176,15 @@ suprcv (void)
               if (currcol < columns)
                 {
                   currcol++;
-                  *ttyfrontp++ = c;
+                  if(unicode_translation) {
+                    char *s = charmap[c].utf8;
+                    while(*s) {
+                      *ttyfrontp++ = *s++;
+                    }
+                  }
+                  else {
+                    *ttyfrontp++ = c;
+                  }
                 }
               else
                 {
@@ -1591,3 +1597,8 @@ setdebug (void)
 }
 #endif /* 0 */
 
+/*
+ * Local Variables:
+ * c-basic-offset: 2
+ * End:
+ */

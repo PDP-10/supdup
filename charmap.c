@@ -37,7 +37,7 @@ CharDefinition charmap[128] = {
 
     { " ", " " }, // 040
     { "!", "!" }, // 041
-    { """, """ }, // 042
+    { "\"", "\"" }, // 042
     { "#", "#" }, // 043
     { "$", "$" }, // 044
     { "%", "%" }, // 045
@@ -129,10 +129,10 @@ CharDefinition charmap[128] = {
     { "y", "y" }, // 171
     { "z", "z" }, // 172
 
-    { "left curly bracket", " " }, // 173 {
-    { "vertical bar", " " }, // 174 |
-    { "Alt Mode character", " " }, // 175 ⎇
-    { "right curly bracket ", " " }, // 176 }
-    { "Rubout ␈ Backspace as BS symbol", " " }, // 177 ␈
+    { "left curly bracket", "{" }, // 173 {
+    { "vertical bar", "|" }, // 174 |
+    { "Alt Mode character", "\xe2\x97\x8a" }, // 175 ◊
+    { "right curly bracket ", "}" }, // 176 }
+    { "Rubout ␈ Backspace as BS symbol", "\xe2\x90\x88" }, // 177 ␈
 
 };
