@@ -56,6 +56,7 @@
 #include <netdb.h>
 
 #include "supdup.h"
+#include "charmap.h"
 
 #include <curses.h>
 #include <term.h>
@@ -101,6 +102,8 @@ int crmod = 0;
 
 /* jmp_buf toplevel; */
 jmp_buf	peerdied;
+
+int unicode_translation = 0;
 
 extern int errno;
 
@@ -302,6 +305,13 @@ main (int argc, char **argv)
       }
     }
 
+  if (argc > 1 && !strcmp(argv[1], "-u"))
+    {
+      argv++;
+      argc--;
+      unicode_translation = 1;
+    }
+
   if (argc == 1)
     {
       char *cp;
@@ -396,6 +406,14 @@ main (int argc, char **argv)
   exit (0);
 }
 
+/*
+000 001.010 000.000 000.000 000.100 000
+010220 000040
+ 10000 000000 TOMVB
+   200 000000 TOMOR
+           40 TPCBS
+  4000
+*/
 
 #define	INIT_LEN	42	/* Number of bytes to send at initialization */
 static char inits[] =
@@ -404,7 +422,8 @@ static char inits[] =
     077,	077,	-6,	0,	0,	0,
     /* TCTYP variable.  Always 7 (supdup) */
     0,	0,	0,	0,	0,	7,
-    /* TTYOPT variable.  %TOMVB %TOMOR %TOLOW  %TPCBS  */
+    /* TTYOPT variable.  %TOMVB %TOMOR %TOLWR %TPCBS */
+    /* %TOSAI will be set if the user has enabled character translation  */
     1,	2,	020,	0,	0,	040,
     /* Height of screen -- updated later */
     0,	0,	0,	0,	0,	24,
@@ -470,9 +489,10 @@ sup_term (void)
     inits[29] = w & 077;
     inits[28] = (w >> 6) & 077;
   }
-  if (clr_eol)		inits[12] |= 04;
-  if (over_strike)	inits[13] |= 010;
-  if (cursor_address)	inits[13] |= 04;
+  if (clr_eol)		   inits[12] |= 04;
+  if (over_strike)	   inits[13] |= 010;
+  if (cursor_address)	   inits[13] |= 04;
+  if (unicode_translation) inits[13] |= 040;
   if (has_meta_key)
     {
       /* %TOFCI */
@@ -1318,7 +1338,15 @@ suprcv (void)
           state = SR_DATA;
           continue;
         case SR_QUOTE:
-          putch (c);
+          if(unicode_translation) {
+            char *s = charmap[c].utf8;
+            while(*s) {
+              putch(*s++);
+            }
+          }
+          else {
+            putch (c);
+          }
           state = SR_DATA;
           continue;
         case SR_IL:
