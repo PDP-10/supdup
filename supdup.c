@@ -55,10 +55,13 @@
 #include <setjmp.h>
 #include <netdb.h>
 
-#include "supdup.h"
-
 #include <curses.h>
 #include <term.h>
+#include <locale.h>
+#include <langinfo.h>
+
+#include "supdup.h"
+#include "charmap.h"
 
 #define OUTSTRING_BUFSIZ 2048
 unsigned char *outstring;
@@ -97,12 +100,10 @@ unsigned char escape_char = ('^'&037);
 /* As opposed to winningly-wrap */
 int do_losingly_scroll = 0;
 
-#if 0 /* brain death */
-int crmod = 0;
-#endif /* 0 */
-
 /* jmp_buf toplevel; */
 jmp_buf	peerdied;
+
+int unicode_translation = 0;
 
 extern int errno;
 
@@ -233,6 +234,8 @@ get_host (char *name)
 int
 main (int argc, char **argv)
 {
+  setlocale(LC_ALL, "");
+
   myloc[0] = '\0';
 
   sp = getservbyname ("supdup", "tcp");
@@ -251,6 +254,17 @@ main (int argc, char **argv)
   setbuf (stdin, 0);
   setbuf (stdout, 0);
   do_losingly_scroll = 0;
+
+  // Before checking arguments, set a default value for unicode_translation.
+  // The computed value can be overridden using the -u or -U flags.
+  char *encoding = nl_langinfo(CODESET);
+  if(strcmp(encoding, "UTF-8") == 0) {
+    unicode_translation = 1;
+  }
+  else {
+    unicode_translation = 0;
+  }
+
   if (argc > 1 && (!strcmp (argv[1], "-s") ||
                    !strcmp (argv[1], "-scroll")))
     {
@@ -302,6 +316,20 @@ main (int argc, char **argv)
 	fprintf(stderr, "-loc requires an argument\n");
 	exit(1);
       }
+    }
+
+  if (argc > 1 && !strcmp(argv[1], "-u"))
+    {
+      argv++;
+      argc--;
+      unicode_translation = 1;
+    }
+
+  if (argc > 1 && !strcmp(argv[1], "-U"))
+    {
+      argv++;
+      argc--;
+      unicode_translation = 0;
     }
 
   if (argc == 1)
@@ -398,7 +426,6 @@ main (int argc, char **argv)
   exit (0);
 }
 
-
 #define	INIT_LEN	42	/* Number of bytes to send at initialization */
 static char inits[] =
   {
@@ -406,7 +433,8 @@ static char inits[] =
     077,	077,	-6,	0,	0,	0,
     /* TCTYP variable.  Always 7 (supdup) */
     0,	0,	0,	0,	0,	7,
-    /* TTYOPT variable.  %TOMVB %TOMOR %TOLOW  %TPCBS  */
+    /* TTYOPT variable.  %TOMVB %TOMOR %TOLWR %TPCBS */
+    /* %TOSAI will be set if the user has enabled character translation  */
     1,	2,	020,	0,	0,	040,
     /* Height of screen -- updated later */
     0,	0,	0,	0,	0,	24,
@@ -472,9 +500,10 @@ sup_term (void)
     inits[29] = w & 077;
     inits[28] = (w >> 6) & 077;
   }
-  if (clr_eol)		inits[12] |= 04;
-  if (over_strike)	inits[13] |= 010;
-  if (cursor_address)	inits[13] |= 04;
+  if (clr_eol)		   inits[12] |= 04;
+  if (over_strike)	   inits[13] |= 010;
+  if (cursor_address)	   inits[13] |= 04;
+  if (unicode_translation) inits[13] |= 060; // %TOSAI + %TOSA1
   if (has_meta_key)
     {
       /* %TOFCI */
@@ -1152,6 +1181,8 @@ suprcv (void)
   while (scc > 0)
     {
       c = *sbp++ & 0377; scc--;
+//      if(c>=0&&c<128)
+//        printf("State: %d, Incoming: %d. Translation: %s\n", state, c, charmap[c].name);
       switch (state)
         {
         case SR_DATA:
@@ -1160,7 +1191,15 @@ suprcv (void)
               if (currcol < columns)
                 {
                   currcol++;
-                  *ttyfrontp++ = c;
+                  if(unicode_translation) {
+                    char *s = charmap[c].utf8;
+                    while(*s) {
+                      *ttyfrontp++ = *s++;
+                    }
+                  }
+                  else {
+                    *ttyfrontp++ = c;
+                  }
                 }
               else
                 {
@@ -1320,7 +1359,15 @@ suprcv (void)
           state = SR_DATA;
           continue;
         case SR_QUOTE:
-          putch (c);
+          if(unicode_translation) {
+            char *s = charmap[c].utf8;
+            while(*s) {
+              putch(*s++);
+            }
+          }
+          else {
+            putch (c);
+          }
           state = SR_DATA;
           continue;
         case SR_IL:
@@ -1565,3 +1612,8 @@ setdebug (void)
 }
 #endif /* 0 */
 
+/*
+ * Local Variables:
+ * c-basic-offset: 2
+ * End:
+ */

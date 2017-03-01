@@ -4,7 +4,7 @@ PREFIX ?= /usr/local
 
 CFLAGS = -g -Wall
 LDFLAGS = -g
-OBJS = supdup.o
+OBJS = supdup.o charmap.o
 LIBS = -lncurses
 EXEC = supdup
 CC = cc
