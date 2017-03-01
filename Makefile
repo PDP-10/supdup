@@ -1,20 +1,18 @@
 # Makefile for the supdup server and user.
 
-# Definitions for supdup.
-# TERMCAP	Uses the termcap database. On many systems this might
-#		require installing ncurses first 
-#		(e.g. in Ubuntu - libncurses-dev).
-# TERMINFO	Uses the terminfo database.  Exactly one of TERMCAP or
-#		TERMINFO must be defined and the corresponding library
-#		(-ltermcap or -lterminfo) must be linked in.
-# DEBUG
 PREFIX ?= /usr/local
 
-supdup: supdup.c termcaps.h
-	cc -DTERMINFO -g -o supdup supdup.c -lncurses
+CFLAGS = -g -Wall
+LDFLAGS = -g
+OBJS = supdup.o
+LIBS = -lncurses
+EXEC = supdup
+
+$(EXEC): $(OBJS)
+	cc $(LDFLAGS) -o $(EXEC) $(OBJS) $(LIBS)
 
 install: supdup
 	install -m 0755 supdup ${PREFIX}/bin
 
 clean:
-	rm -rf supdup
+	rm -f $(EXEC) $(OBJS)
