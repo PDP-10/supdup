@@ -133,7 +133,7 @@ CharDefinition charmap[128] = {
 
     { "left curly bracket", "{" }, // 173 {
     { "vertical bar", "|" }, // 174 |
-    { "Alt Mode character", "\xe2\x8e\x87ALT" }, // 175 ⎇ALT
+    { "Alt Mode character", "\xe2\x8e\x87" "ALT" }, // 175 ⎇ALT
     { "right curly bracket ", "}" }, // 176 }
     { "integral", "\xe2\x88\xab" }, // 177 ∫
 

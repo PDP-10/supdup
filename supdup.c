@@ -55,11 +55,13 @@
 #include <setjmp.h>
 #include <netdb.h>
 
-#include "supdup.h"
-#include "charmap.h"
-
 #include <curses.h>
 #include <term.h>
+#include <locale.h>
+#include <langinfo.h>
+
+#include "supdup.h"
+#include "charmap.h"
 
 #define OUTSTRING_BUFSIZ 2048
 unsigned char *outstring;
@@ -230,6 +232,8 @@ get_host (char *name)
 int
 main (int argc, char **argv)
 {
+  setlocale(LC_ALL, "");
+
   myloc[0] = '\0';
 
   sp = getservbyname ("supdup", "tcp");
@@ -248,6 +252,17 @@ main (int argc, char **argv)
   setbuf (stdin, 0);
   setbuf (stdout, 0);
   do_losingly_scroll = 0;
+
+  // Before checking arguments, set a default value for unicode_translation.
+  // The computed value can be overridden using the -u or -U flags.
+  char *encoding = nl_langinfo(CODESET);
+  if(strcmp(encoding, "UTF-8") == 0) {
+    unicode_translation = 1;
+  }
+  else {
+    unicode_translation = 0;
+  }
+
   if (argc > 1 && (!strcmp (argv[1], "-s") ||
                    !strcmp (argv[1], "-scroll")))
     {
@@ -306,6 +321,13 @@ main (int argc, char **argv)
       argv++;
       argc--;
       unicode_translation = 1;
+    }
+
+  if (argc > 1 && !strcmp(argv[1], "-U"))
+    {
+      argv++;
+      argc--;
+      unicode_translation = 0;
     }
 
   if (argc == 1)
