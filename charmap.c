@@ -25,7 +25,7 @@ CharDefinition charmap[128] = {
     { "there exists", "\342\210\203" }, // 025 ∃
     { "Circled Times ⊗ Boolean XOR", "\342\223\247" }, // 026 ⊗
     { "horizontal double arrow", "\342\206\224" }, // 027 ↔
-    { "underscore", "\030" }, // 030 _
+    { "left arrow", "\xe2\x86\x90" }, // 030 ←
     { "right arrow ", "\342\206\222" }, // 031 →
     { "not equal", "\342\211\240" }, // 032 ≠
     { "Alt Mode character", "\xe2\x97\x8a" }, // 033 ◊
