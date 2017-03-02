@@ -426,15 +426,6 @@ main (int argc, char **argv)
   exit (0);
 }
 
-/*
-000 001.010 000.000 000.000 000.100 000
-010220 000040
- 10000 000000 TOMVB
-   200 000000 TOMOR
-           40 TPCBS
-  4000
-*/
-
 #define	INIT_LEN	42	/* Number of bytes to send at initialization */
 static char inits[] =
   {
