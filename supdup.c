@@ -488,7 +488,7 @@ sup_term (void)
   if (clr_eol)		   inits[12] |= 04;
   if (over_strike)	   inits[13] |= 010;
   if (cursor_address)	   inits[13] |= 04;
-  if (unicode_translation) inits[13] |= 040;
+  if (unicode_translation) inits[13] |= 060; // %TOSAI + %TOSA1
   if (has_meta_key)
     {
       /* %TOFCI */

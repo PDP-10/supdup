@@ -2,7 +2,7 @@
 #include "charmap.h"
 
 CharDefinition charmap[128] = {
-    { "NUL", "" }, // 000 NUL
+    { "centered dot", "\xc2\xb7" }, // 000 ·
     { "down arrow", "\342\206\223" }, // 001 ↓
     { "alpha", "\316\261" }, // 002 α
     { "beta", "\316\262" }, // 003 β
@@ -11,11 +11,11 @@ CharDefinition charmap[128] = {
     { "epsilon", "\316\265" }, // 006 ε
     { "pi", "\317\200" }, // 007 π
     { "lambda", "\316\273" }, // 010 λ
-    { "horizontal tab whitespace", " " }, // 011  
-    { "new line whitespace", " " }, // 012  
-    { "vertical tab whitespace", " " }, // 013  
-    { "form feed as FF symbol", " " }, // 014 ␌
-    { "carriage return whitespace", " " }, // 015  
+    { "gamma", "\xce\xb3" }, // 011 γ
+    { "delta", "\xce\xb4" }, // 012 δ
+    { "up arrow", "\xe2\x86\x91" }, // 013 ↑
+    { "plus minus", "\xc2\xb1" }, // 014 ±
+    { "circled plus", "\xe2\x8a\x95" }, // 015 ⊕
     { "infinity (lazy eight)", "\342\210\236" }, // 016 ∞
     { "partial differential ", "\342\210\202" }, // 017 ∂
     { "subset ⊂ contains (left horse shoe)", "\342\212\202" }, // 020 ⊂
@@ -28,8 +28,8 @@ CharDefinition charmap[128] = {
     { "horizontal double arrow", "\342\206\224" }, // 027 ↔
     { "underscore", "\030" }, // 030 _
     { "right arrow ", "\342\206\222" }, // 031 →
-    { "tilde", "\032" }, // 032 ~
-    { "not equal", "\342\211\240" }, // 033 ≠
+    { "not equal", "\342\211\240" }, // 032 ≠
+    { "Alt Mode character", "\xe2\x97\x8a" }, // 033 ◊
     { "less than or equal", "\342\211\244" }, // 034 ≤
     { "greater than or equal", "\342\211\245" }, // 035 ≥
     { "equivalence", "\342\211\241" }, // 036 ≡
@@ -98,8 +98,10 @@ CharDefinition charmap[128] = {
     { "\\", "\\" }, // 134
     { "]", "]" }, // 135
 
-    { "up arrow", "\342\206\221" }, // 136 ↑
-    { "left arrow", "\342\206\220" }, // 137 ←
+//    { "up arrow", "\342\206\221" }, // 136 ↑
+//    { "left arrow", "\342\206\220" }, // 137 ←
+    { "up arrow", "^" }, // 136 ^
+    { "left arrow", "_" }, // 137 _
 
     { "`", "`" }, // 140
     { "a", "a" }, // 141
@@ -131,8 +133,8 @@ CharDefinition charmap[128] = {
 
     { "left curly bracket", "{" }, // 173 {
     { "vertical bar", "|" }, // 174 |
-    { "Alt Mode character", "\xe2\x97\x8a" }, // 175 ◊
+    { "Alt Mode character", "\xe2\x8e\x87ALT" }, // 175 ⎇ALT
     { "right curly bracket ", "}" }, // 176 }
-    { "Rubout ␈ Backspace as BS symbol", "\xe2\x90\x88" }, // 177 ␈
+    { "integral", "\xe2\x88\xab" }, // 177 ∫
 
 };
