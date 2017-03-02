@@ -8,6 +8,8 @@ OBJS = supdup.o charmap.o
 LIBS = -lncurses
 EXEC = supdup
 
+all:	$(EXEC)
+
 $(EXEC): $(OBJS)
 	cc $(LDFLAGS) -o $(EXEC) $(OBJS) $(LIBS)
 
