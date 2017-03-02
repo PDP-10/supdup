@@ -16,17 +16,17 @@ CharDefinition charmap[128] = {
     { "plus minus", "\xc2\xb1" }, // 014 ±
     { "circled plus", "\xe2\x8a\x95" }, // 015 ⊕
     { "infinity (lazy eight)", "\342\210\236" }, // 016 ∞
-    { "partial differential ", "\342\210\202" }, // 017 ∂
+    { "partial differential", "\342\210\202" }, // 017 ∂
     { "subset ⊂ contains (left horse shoe)", "\342\212\202" }, // 020 ⊂
     { "superset ⊃ implies (right horse shoe)", "\342\212\203" }, // 021 ⊃
     { "intersection", "\342\210\251" }, // 022 ∩
-    { "union ", "\342\210\252" }, // 023 ∪
-    { "for all ", "\342\210\200" }, // 024 ∀
+    { "union", "\342\210\252" }, // 023 ∪
+    { "for all", "\342\210\200" }, // 024 ∀
     { "there exists", "\342\210\203" }, // 025 ∃
     { "Circled Times ⊗ Boolean XOR", "\342\223\247" }, // 026 ⊗
     { "horizontal double arrow", "\342\206\224" }, // 027 ↔
     { "left arrow", "\xe2\x86\x90" }, // 030 ←
-    { "right arrow ", "\342\206\222" }, // 031 →
+    { "right arrow", "\342\206\222" }, // 031 →
     { "not equal", "\342\211\240" }, // 032 ≠
     { "Alt Mode character", "\xe2\x97\x8a" }, // 033 ◊
     { "less than or equal", "\342\211\244" }, // 034 ≤
@@ -133,7 +133,7 @@ CharDefinition charmap[128] = {
     { "left curly bracket", "{" }, // 173 {
     { "vertical bar", "|" }, // 174 |
     { "Alt Mode character", "\xe2\x8e\x87" "ALT" }, // 175 ⎇ALT
-    { "right curly bracket ", "}" }, // 176 }
+    { "right curly bracket", "}" }, // 176 }
     { "integral", "\xe2\x88\xab" }, // 177 ∫
 
 };
