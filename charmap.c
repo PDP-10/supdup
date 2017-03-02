@@ -1,4 +1,3 @@
-#define IN_CHARMAP
 #include "charmap.h"
 
 CharDefinition charmap[128] = {

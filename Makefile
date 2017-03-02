@@ -7,11 +7,12 @@ LDFLAGS = -g
 OBJS = supdup.o charmap.o
 LIBS = -lncurses
 EXEC = supdup
+CC = cc
 
 all:	$(EXEC)
 
 $(EXEC): $(OBJS)
-	cc $(LDFLAGS) -o $(EXEC) $(OBJS) $(LIBS)
+	$(CC) $(LDFLAGS) -o $(EXEC) $(OBJS) $(LIBS)
 
 install: supdup
 	install -m 0755 supdup ${PREFIX}/bin

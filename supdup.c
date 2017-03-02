@@ -67,8 +67,10 @@
 unsigned char *outstring;
 
 #define TBUFSIZ 1024
-unsigned char ttyobuf[TBUFSIZ], *ttyfrontp = ttyobuf;
-unsigned char netobuf[TBUFSIZ], *netfrontp = netobuf;
+unsigned char ttyobuf[TBUFSIZ];
+unsigned char *ttyfrontp = ttyobuf;
+unsigned char netobuf[TBUFSIZ];
+unsigned char *netfrontp = netobuf;
 
 unsigned char hisopts[256];
 unsigned char myopts[256];
@@ -1552,13 +1554,13 @@ key_name (int c)
 
 void deadpeer(int sig)
 {
-  (void) mode (0);
+  mode (0);
   longjmp (peerdied, -1);
 }
 
 void intr (int sig)
 {
-  (void) mode (0);
+  mode (0);
   exit (1);
 }
 
