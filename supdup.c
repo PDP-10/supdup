@@ -6,10 +6,6 @@
  * with 4.2 BSD UNIX.
  */
 
-/* Define exactly one of TERMCAP or TERMINFO.
- * Link with the appropriate TERMINFO or TERMCAP library.
- */
-
 /* Hacked by Bjorn Victor, November 2010, to add function declarations
    to make it compile/run in some more environments.
    Hacked by Bjorn Victor, 2004-2005, to support termios (Linux) and location setting.
@@ -59,40 +55,22 @@
 #include <setjmp.h>
 #include <netdb.h>
 
-#include "supdup.h"
-
-#ifdef TERMINFO
+#include <curses.h>
 #include <term.h>
-#endif /* TERMINFO */
+#include <locale.h>
+#include <langinfo.h>
 
-#ifdef	TERMCAP
-#if !USE_TERMIOS
-#include <sys/ioctl_compat.h>	/* Kludge assumption: BSDish system */
-#else
-#include <termios.h>
-#include <unistd.h>
-#endif
-
-#ifdef __NetBSD__
-#include <sys/time.h>
-#include <sys/select.h>
-#endif
-
-extern char *tgetstr();
-
-#include "termcaps.h"		/* Get table of term caps we want */
-
-static char tspace[2048], *aoftspace;
+#include "supdup.h"
+#include "charmap.h"
 
 #define OUTSTRING_BUFSIZ 2048
 unsigned char *outstring;
 
-unsigned char *tparam(), *tgoto();
-#endif /* TERMCAP */
-
 #define TBUFSIZ 1024
-unsigned char ttyobuf[TBUFSIZ], *ttyfrontp = ttyobuf;
-unsigned char netobuf[TBUFSIZ], *netfrontp = netobuf;
+unsigned char ttyobuf[TBUFSIZ];
+unsigned char *ttyfrontp = ttyobuf;
+unsigned char netobuf[TBUFSIZ];
+unsigned char *netfrontp = netobuf;
 
 unsigned char hisopts[256];
 unsigned char myopts[256];
@@ -122,34 +100,35 @@ unsigned char escape_char = ('^'&037);
 /* As opposed to winningly-wrap */
 int do_losingly_scroll = 0;
 
-#if 0 /* brain death */
-int crmod = 0;
-#endif /* 0 */
-
 /* jmp_buf toplevel; */
 jmp_buf	peerdied;
+
+int unicode_translation = 0;
 
 extern int errno;
 
 /* Impoverished un*x keyboards */
 #define Ctl(c) ((c)&037)
 
-int sd ();
-void suspend (), help (), quit (), rlogout (), suprcv();
-void command(unsigned char c), do_setloc(char *c);
+int sd(void);
+void suspend(void);
+void help(void);
+void quit(void);
+void rlogout(void);
+void suprcv(void);
+void command(unsigned char c);
+void do_setloc(char *c);
 void netflush(int d);
-void setescape ();
-void top (), status();
-void setloc ();			/* [BV] */
-#if 0
-int setcrmod (), setdebug (), setoptions ();
-#endif /* 0 */
+void setescape(void);
+void top(void);
+void status(void);
+void setloc(void);
 
 struct cmd
  {
    unsigned char name;          /* command name */
    char *help;                  /* help string */
-   void (*handler)();            /* routine which executes command */
+   void (*handler)(void);       /* routine which executes command */
  };
 
 struct cmd cmdtab[] =
@@ -170,20 +149,19 @@ struct cmd cmdtab[] =
     { 'd',	"toggle debugging", setdebug },
     { 'v',	"toggle viewing of options processing", setoptions },
 #endif /* 0 */
-    0
+    { 0 }
   };
 
 int currcol, currline;	/* Current cursor position */
 
 struct sockaddr_in tsin;
 
-static void zap();
-void sup_term();
+void sup_term(void);
 void supdup (char *loc);
-void	intr(int), deadpeer(int);
-char	*key_name ();
-struct	cmd *getcmd ();
-struct	servent *sp;
+void intr(int), deadpeer(int);
+char *key_name(int);
+struct cmd *getcmd(void);
+struct servent *sp;
 
 #if !USE_TERMIOS
 struct	tchars otc;
@@ -193,29 +171,21 @@ struct	sgttyb ottyb;
 struct termios otio;
 #endif
 
-int mode(), systgetent();
-int tgetnum(), tgetflag(), tgetent();
-void ttyoflush(), tputs();
+int mode(int);
+void ttyoflush(void);
 
-void putch (c)
-     register int c;
+int putch (int c)
 {
   *ttyfrontp++ = c;
   /*>>>>> LOSES if overflows */
+  return 1;
 }
 
 
 void put_newline ()
 {
-#ifdef	TERMINFO
   if (newline)
     tputs (newline, 1, putch);
-#else
-#ifdef TERMCAP
-  if (fresh_line)
-    tputs (fresh_line, 1, putch);
-#endif /* TERMCAP */
-#endif /* TERMINFO */
   else
     {
       if (carriage_return)
@@ -230,22 +200,15 @@ void put_newline ()
   ttyoflush ();
 }
 
-#ifdef TERMINFO
 #define term_goto(c, l) \
   tputs (tparm (cursor_address, l, c), lines, putch)
-#endif /* TERMINFO */
-#ifdef TERMCAP
-#define term_goto(c, l) \
-  tputs (tgoto (cursor_address, c, l), lines, putch)
-#endif /* TERMCAP */
 
 char *hostname;
 
 void
-get_host (name)
-     char *name;
+get_host (char *name)
 {
-  register struct hostent *host;
+  struct hostent *host;
   host = gethostbyname (name);
   if (host)
     {
@@ -269,10 +232,10 @@ get_host (name)
 }
 
 int
-main (argc, argv)
-     int argc;
-     char *argv[];
+main (int argc, char **argv)
 {
+  setlocale(LC_ALL, "");
+
   myloc[0] = '\0';
 
   sp = getservbyname ("supdup", "tcp");
@@ -291,6 +254,17 @@ main (argc, argv)
   setbuf (stdin, 0);
   setbuf (stdout, 0);
   do_losingly_scroll = 0;
+
+  // Before checking arguments, set a default value for unicode_translation.
+  // The computed value can be overridden using the -u or -U flags.
+  char *encoding = nl_langinfo(CODESET);
+  if(strcmp(encoding, "UTF-8") == 0) {
+    unicode_translation = 1;
+  }
+  else {
+    unicode_translation = 0;
+  }
+
   if (argc > 1 && (!strcmp (argv[1], "-s") ||
                    !strcmp (argv[1], "-scroll")))
     {
@@ -342,6 +316,20 @@ main (argc, argv)
 	fprintf(stderr, "-loc requires an argument\n");
 	exit(1);
       }
+    }
+
+  if (argc > 1 && !strcmp(argv[1], "-u"))
+    {
+      argv++;
+      argc--;
+      unicode_translation = 1;
+    }
+
+  if (argc > 1 && !strcmp(argv[1], "-U"))
+    {
+      argv++;
+      argc--;
+      unicode_translation = 0;
     }
 
   if (argc == 1)
@@ -426,18 +414,17 @@ main (argc, argv)
   printf ("Connected to %s.\n", hostname);
   printf ("Escape character is \"%s\".", key_name (escape_char));
   fflush (stdout);
-  (void) mode (1);
+  mode (1);
   if (clr_eos)
     tputs (clr_eos, lines - currline, putch);
   put_newline ();
   if (setjmp (peerdied) == 0)
     supdup (myloc);
   ttyoflush ();
-  (void) mode (0);
+  mode (0);
   fprintf (stderr, "Connection closed by %s.\n", hostname);
   exit (0);
 }
-
 
 #define	INIT_LEN	42	/* Number of bytes to send at initialization */
 static char inits[] =
@@ -446,7 +433,8 @@ static char inits[] =
     077,	077,	-6,	0,	0,	0,
     /* TCTYP variable.  Always 7 (supdup) */
     0,	0,	0,	0,	0,	7,
-    /* TTYOPT variable.  %TOMVB %TOMOR %TOLOW  %TPCBS  */
+    /* TTYOPT variable.  %TOMVB %TOMOR %TOLWR %TPCBS */
+    /* %TOSAI will be set if the user has enabled character translation  */
     1,	2,	020,	0,	0,	040,
     /* Height of screen -- updated later */
     0,	0,	0,	0,	0,	24,
@@ -463,9 +451,8 @@ static char inits[] =
  * opened.
  */
 void
-sup_term ()
+sup_term (void)
 {
-#ifdef TERMINFO
   int errret;
 
   setupterm (0, 1, &errret);
@@ -479,27 +466,6 @@ sup_term ()
       fprintf (stderr, "Unknown terminal type.\n");
       exit (1);
     }
-#endif /* TERMINFO */
-#ifdef TERMCAP
-  static char bp[2000];
-
-  switch (systgetent (bp))
-    {
-    case 1:
-	if (tdebug_file)
-	    fprintf(tdebug_file, "TERMCAP data: %s\n", bp);
-      zap ();
-      break;
-
-    case 0:
-      fprintf (stderr, "Invalid terminal.\n");
-      exit (1);
-
-    case -1:
-      fprintf (stderr, "Can't open termcap file.\n");
-      exit (1);
-    }
-#endif /* TERMCAP */
 
   if (columns <= 1) {
       int badcols = columns;
@@ -516,19 +482,13 @@ sup_term ()
  */
  
   if (do_losingly_scroll) {
-    if (no_scroll && !SF)
-      {
-        fprintf (stderr, "(Terminal won't scroll.  Hah!!)\n");
-        do_losingly_scroll = 0;
-      }
-    else
       inits[13] |= 01;
   }
 
   inits[23] = lines & 077;
   inits[22] = (lines >> 6) & 077;
   {
-    register int w;
+    int w;
 
     if (auto_right_margin)
       /* Brain death!  Can't write in last column of last line
@@ -540,10 +500,11 @@ sup_term ()
     inits[29] = w & 077;
     inits[28] = (w >> 6) & 077;
   }
-  if (clr_eol)		inits[12] |= 04;
-  if (over_strike)	inits[13] |= 010;
-  if (cursor_address)	inits[13] |= 04;
-  if (has_meta_key || also_has_meta_key)
+  if (clr_eol)		   inits[12] |= 04;
+  if (over_strike)	   inits[13] |= 010;
+  if (cursor_address)	   inits[13] |= 04;
+  if (unicode_translation) inits[13] |= 060; // %TOSAI + %TOSA1
+  if (has_meta_key)
     {
       /* %TOFCI */
 /* Don't do this -- it implies that we can generate full MIT 12-bit */
@@ -558,76 +519,13 @@ sup_term ()
     inits[14] |= 01;
 }
 
-#ifdef	TERMCAP
-static void zap ()
-{
-    int i;
-    struct tcent *tc = tcaptab;
-
-    aoftspace = tspace;
-
-  for (i = 0; i < (sizeof(tcaptab)/sizeof(tcaptab[0])); ++i, ++tc) {
-      switch (tc->tctyp) {
-      case TCTYP_STR:
-	  tc->tcval.str = tgetstr(tc->tcname, &aoftspace);
-	  if (tdebug_file)
-	      fprintf(tdebug_file, "str %s: %s\n",
-		      tc->tcname, (tc->tcval.str ? tc->tcval.str : "-null-"));
-	  break;
-      case TCTYP_NUM:
-	  tc->tcval.num = tgetnum(tc->tcname);
-	  if (tdebug_file)
-	      fprintf(tdebug_file, "num %s: %d\n",
-		      tc->tcname, tc->tcval.num);
-	  break;
-      case TCTYP_FLG:
-	  tc->tcval.flg = tgetflag(tc->tcname);
-	  if (tdebug_file)
-	      fprintf(tdebug_file, "flg %s: %s\n",
-		      tc->tcname, (tc->tcval.flg ? "true" : "false"));
-	  break;
-      default:
-	  fprintf(stderr,"supdup: unknown termcap \"%s\"\n",
-		  tcaptab[i].tcname);
-	  continue;
-      }
-  }
-
-
-/*
-  if (!cursor_left)
-    cursor_left = "\b";
-  if (!carriage_return)
-    carriage_return = "\r";
-  if (!cursor_down)
-    cursor_down = "\n";
-*/
-
-}
-
-extern char *getenv ();
-
-int
-systgetent (bp)
-     char *bp;
-{
-  register char *term;
-
-  if ((term = getenv ("TERM")))
-    return tgetent (bp, term);
-  else
-    return 0;
-}
-#endif /* TERMCAP */
-
 #if !USE_TERMIOS
 struct	tchars notc =	{ -1, -1, -1, -1, -1, -1 };
 struct	ltchars noltc =	{ -1, -1, -1, -1, -1, -1 };
 #endif
 
 int
-mode (f)
-     register int f;
+mode (int f)
 {
   static int prevmode = 0;
 #if !USE_TERMIOS
@@ -643,12 +541,6 @@ mode (f)
     return (f);
   old = prevmode;
   prevmode = f;
-  if (!f) {			/* BV: restore screen */
-    if ((TI) && (TE)) {
-      tputs(TE, 0, putch);
-      ttyoflush();
-    }
-  }
 #if !USE_TERMIOS
   sb = ottyb;
 #else
@@ -690,12 +582,6 @@ mode (f)
 #endif
   ioctl (fileno (stdin), FIONBIO, &onoff);
   ioctl (fileno (stdout), FIONBIO, &onoff);
-  if (f) {			/* BV: use alternate screen buffer */
-    if ((TI) && (TE)) {
-      tputs(TI, 0, putch);
-      ttyoflush();
-    }
-  }
   return (old);
 }
 
@@ -708,7 +594,7 @@ int escape_seen;
 int saved_col, saved_row;
 
 void
-restore ()
+restore (void)
 {
   if (cursor_address)
     {
@@ -725,15 +611,12 @@ restore ()
 }
 
 void
-clear_bottom_line ()
+clear_bottom_line (void)
 {
-  if (LL || cursor_address)
+  if (cursor_address)
     {
       currcol = 0; currline = lines - 1;
-      if (LL)
-        tputs (LL, 1, putch);
-      else
-        term_goto (currcol, currline);
+      term_goto (currcol, currline);
       if (clr_eol)
         tputs (clr_eol, columns, putch);
     }
@@ -741,7 +624,7 @@ clear_bottom_line ()
 }
 
 int
-read_char ()
+read_char (void)
 {
 #if USE_BSD_SELECT
   int readfds;
@@ -754,7 +637,7 @@ read_char ()
       tcc = read (fileno (stdin), tibuf, 1);
       if (tcc >= 0 || errno != EWOULDBLOCK)
         {
-          register int c = (tcc <= 0) ? -1 : tibuf[0];
+          int c = (tcc <= 0) ? -1 : tibuf[0];
           tcc = 0; tbp = tibuf;
           return (c);
         }
@@ -776,10 +659,9 @@ read_char ()
  * Select from tty and network...
  */
 void
-supdup (loc)
-     char *loc;
+supdup (char *loc)
 {
-  register int c;
+  int c;
   int tin = fileno (stdin), tout = fileno (stdout);
   int on = 1;
 #if !USE_BSD_SELECT
@@ -794,9 +676,6 @@ supdup (loc)
   if (*loc != '\0')
     do_setloc(loc);
 
-#ifdef TERMCAP
-  if (VS) tputs (VS, 0, putch);
-#endif /* TERMCAP */
   scc = 0;
   tcc = 0;
   escape_seen = 0;
@@ -910,7 +789,7 @@ supdup (loc)
 
       while (tcc > 0)
         {
-          register int c;
+          int c;
 
           if ((&netobuf[sizeof(netobuf)] - netfrontp) < 2)
             break;
@@ -993,10 +872,9 @@ supdup (loc)
 
 
 void
-command (chr)
-     unsigned char chr;
+command (unsigned char chr)
 {
-  register struct cmd *c;
+  struct cmd *c;
 
   /* flush typeahead */
   tcc = 0;
@@ -1041,7 +919,7 @@ command (chr)
 }
 
 void
-status ()
+status (void)
 {
   if (cursor_address)
     {
@@ -1064,7 +942,7 @@ status ()
   ttyoflush ();
   /* eat space, or unread others */
   {
-    register int c;
+    int c;
     c = read_char ();
     restore ();
     if (c < 0)
@@ -1077,9 +955,9 @@ status ()
 }
 
 void
-suspend ()
+suspend (void)
 {
-  register int save;
+  int save;
 
   if (cursor_home)
     tputs (cursor_home, 1, putch);
@@ -1087,9 +965,6 @@ suspend ()
     term_goto (0, 0);
   if (clr_eol)
     tputs (clr_eol, columns, putch);
-#ifdef TERMCAP
-  if (VE) tputs (VE, 0, putch);
-#endif /* TERMCAP */
   ttyoflush ();
   save = mode (0);
   if (!cursor_address)
@@ -1104,9 +979,6 @@ suspend ()
   tcsetattr(0, TCSANOW, &otio);
 #endif
   (void) mode (save);
-#ifdef TERMCAP
-  if (VS) tputs (VS, 0, putch);
-#endif /* TERMCAP */
   *netfrontp++ = ITP_ESCAPE;      /* Tell other end that it sould refresh */
   *netfrontp++ = ITP_PIATY;       /* the screen */
   restore ();
@@ -1116,9 +988,9 @@ suspend ()
  * Help command.
  */
 void
-help ()
+help (void)
 {
-  register struct cmd *c;
+  struct cmd *c;
   
   if (cursor_address)
     {
@@ -1152,7 +1024,7 @@ help ()
   ttyoflush ();
 
   {
-    register int c;
+    int c;
     c = read_char ();
     restore ();
     if (c < 0)
@@ -1167,8 +1039,7 @@ help ()
 
 /* [BV] send "set console location" (see rfc734) */
 void
-do_setloc(loc)
-     char *loc;
+do_setloc(char *loc)
 {
   *netfrontp++ = SUPDUP_ESCAPE;
   *netfrontp++ = SUPDUP_LOCATION;
@@ -1181,7 +1052,7 @@ do_setloc(loc)
 /* This turns out to be of limited use, since TELSER in ITS doesn't null-terminate
    the sent string; thus you can only make it longer.  Use :TTLOC in ITS instead. */
 void
-setloc()
+setloc(void)
 {
   char c, loc[128];
   int i;
@@ -1226,10 +1097,9 @@ setloc()
 }
 
 void
-punt (logout_p)
-     int logout_p;
+punt (int logout_p)
 {
-  register int c;
+  int c;
 
   clear_bottom_line ();
   /* flush typeahead */
@@ -1260,9 +1130,6 @@ punt (logout_p)
     tputs (cursor_home, 1, putch);
   else if (cursor_address)
     term_goto (0, 0);
-#ifdef TERMCAP
-  if (VE) tputs (VE, 0, putch);
-#endif /* TERMCAP */
   ttyoflush ();
   (void) mode (0);
   if (!cursor_address)
@@ -1278,13 +1145,13 @@ punt (logout_p)
 }
 
 void
-quit ()
+quit (void)
 {
   punt (0);
 }
 
 void
-rlogout ()
+rlogout (void)
 {
   punt (1);
 }
@@ -1305,15 +1172,17 @@ rlogout ()
 #define	SR_DC		9
 
 void
-suprcv ()
+suprcv (void)
 {
-  register int c;
+  int c;
   static int state = SR_DATA;
   static int y;
 
   while (scc > 0)
     {
       c = *sbp++ & 0377; scc--;
+//      if(c>=0&&c<128)
+//        printf("State: %d, Incoming: %d. Translation: %s\n", state, c, charmap[c].name);
       switch (state)
         {
         case SR_DATA:
@@ -1322,7 +1191,15 @@ suprcv ()
               if (currcol < columns)
                 {
                   currcol++;
-                  *ttyfrontp++ = c;
+                  if(unicode_translation) {
+                    char *s = charmap[c].utf8;
+                    while(*s) {
+                      *ttyfrontp++ = *s++;
+                    }
+                  }
+                  else {
+                    *ttyfrontp++ = c;
+                  }
                 }
               else
                 {
@@ -1358,8 +1235,6 @@ suprcv ()
                 currcol = 0;
               else if (cursor_left)
                 tputs (cursor_left, 0, putch);
-              else if (BS)
-                putch ('\b');
               else if (cursor_address)
                 term_goto (currcol, currline);
               continue;
@@ -1484,21 +1359,21 @@ suprcv ()
           state = SR_DATA;
           continue;
         case SR_QUOTE:
-          putch (c);
+          if(unicode_translation) {
+            char *s = charmap[c].utf8;
+            while(*s) {
+              putch(*s++);
+            }
+          }
+          else {
+            putch (c);
+          }
           state = SR_DATA;
           continue;
         case SR_IL:
           if (parm_insert_line)
             {
-#ifdef TERMINFO
               tputs (tparm (parm_insert_line, c), c, putch);
-#endif /* TERMINFO */
-#ifdef TERMCAP
-              outstring = tparam (parm_insert_line,
-                                  outstring, OUTSTRING_BUFSIZ,
-                                  c);
-              tputs (outstring, c, putch);
-#endif /* TERMCAP */
             }
           else
             if (insert_line)
@@ -1509,15 +1384,7 @@ suprcv ()
         case SR_DL:
           if (parm_delete_line)
             {
-#ifdef TERMINFO
               tputs (tparm (parm_delete_line, c), c, putch);
-#endif /* TERMINFO */
-#ifdef TERMCAP
-              outstring = tparam (parm_delete_line,
-                                  outstring, OUTSTRING_BUFSIZ,
-                                  c);
-              tputs (outstring, c, putch);
-#endif /* TERMCAP */
             }
           else
             if (delete_line)
@@ -1528,15 +1395,7 @@ suprcv ()
         case SR_IC:
           if (parm_ich)
             {
-#ifdef TERMINFO
               tputs (tparm (parm_ich, c), c, putch);
-#endif /* TERMINFO */
-#ifdef TERMCAP
-              outstring = tparam (parm_ich,
-                                  outstring, OUTSTRING_BUFSIZ,
-                                  c);
-              tputs (outstring, c, putch);
-#endif /* TERMCAP */
             }
           else
             if (insert_character)
@@ -1547,15 +1406,7 @@ suprcv ()
         case SR_DC:
           if (parm_dch)
             {
-#ifdef TERMINFO
               tputs (tparm (parm_dch, c), c, putch);
-#endif /* TERMINFO */
-#ifdef TERMCAP
-              outstring = tparam (parm_dch,
-                                  outstring, OUTSTRING_BUFSIZ,
-                                  c);
-              tputs (outstring, c, putch);
-#endif /* TERMCAP */
             }
           else
             if (delete_character)
@@ -1568,7 +1419,7 @@ suprcv ()
 }
 
 void
-ttyoflush ()
+ttyoflush (void)
 {
   int n;
   unsigned char *back = ttyobuf;
@@ -1600,8 +1451,7 @@ ttyoflush ()
 }
 
 void
-netflush (dont_die)
-     int dont_die;
+netflush (int dont_die)
 {
   int n;
   unsigned char *back = netobuf;
@@ -1628,11 +1478,11 @@ netflush (dont_die)
 
 
 char key_name_buffer[20];
+
 char *
-key_name (c)
-     register int c;
+key_name (int c)
 {
-  register char *p = key_name_buffer;
+  char *p = key_name_buffer;
   if (c >= 0200)
     {
       *p++ = 'M';
@@ -1695,18 +1545,18 @@ key_name (c)
 
 void deadpeer(int sig)
 {
-  (void) mode (0);
+  mode (0);
   longjmp (peerdied, -1);
 }
 
 void intr (int sig)
 {
-  (void) mode (0);
+  mode (0);
   exit (1);
 }
 
 void
-top ()
+top (void)
 {
   high_bits |= 020;
   restore ();
@@ -1716,7 +1566,7 @@ top ()
  * Set the escape character.
  */
 void
-setescape ()
+setescape (void)
 {
   clear_bottom_line ();
   printf ("Type new escape character: ");
@@ -1728,7 +1578,7 @@ setescape ()
 }
 
 #if 0
-setoptions ()
+setoptions (void)
 {
   showoptions = !showoptions;
   clear_bottom_line ();
@@ -1739,7 +1589,8 @@ setoptions ()
 
 #if 0
 /* >>>>>> ???!! >>>>>> */
-setcrmod ()
+void
+setcrmod (void)
 {
   crmod = !crmod;
   clear_bottom_line ();
@@ -1749,7 +1600,8 @@ setcrmod ()
 #endif /* 0 */
 
 #if 0
-setdebug ()
+void
+setdebug (void)
 {
   debug = !debug;
   clear_bottom_line ();
@@ -1760,248 +1612,8 @@ setdebug ()
 }
 #endif /* 0 */
 
-
-#ifdef	TERMCAP
-
-/* Assuming STRING is the value of a termcap string entry
-   containing `%' constructs to expand parameters,
-   merge in parameter values and store result in block OUTSTRING points to.
-   LEN is the length of OUTSTRING.  If more space is needed,
-   a block is allocated with `malloc'.
-
-   The value returned is the address of the resulting string.
-   This may be OUTSTRING or may be the address of a block got with `malloc'.
-   In the latter case, the caller must free the block.
-
-   The fourth and following args to tparam serve as the parameter values.  */
-
-static unsigned char *tparam1 ();
-
-/* VARARGS 2 */
-unsigned char *
-tparam (string, outstring, len, arg0, arg1, arg2, arg3)
-     unsigned char *string;
-     unsigned char *outstring;
-     int len;
-     int arg0, arg1, arg2, arg3;
-{
-  int arg[4];
-  arg[0] = arg0;
-  arg[1] = arg1;
-  arg[2] = arg2;
-  arg[3] = arg3;
-  return tparam1 (string, outstring, len, 0, 0, arg);
-}
-
-unsigned char *BC;
-unsigned char *UP;
-
-static unsigned char tgoto_buf[50];
-
-unsigned char *
-tgoto (cm, hpos, vpos)
-     char *cm;
-     int hpos, vpos;
-{
-  int args[2];
-  if (!cm)
-    return 0;
-  args[0] = vpos;
-  args[1] = hpos;
-  return tparam1 (cm, tgoto_buf, 50, UP, BC, args);
-}
-
-static unsigned char *
-tparam1 (string, outstring, len, up, left, argp)
-     unsigned char *string;
-     unsigned char *outstring;
-     int len;
-     unsigned char *up, *left;
-     register int *argp;
-{
-  register int c;
-  register unsigned char *p = string;
-  register unsigned char *op = outstring;
-  unsigned char *outend;
-  int outlen = 0;
-
-  register int tem;
-  int *oargp = argp;
-  unsigned char *doleft = 0;
-  unsigned char *doup = 0;
-
-  outend = outstring + len;
-
-  while (1)
-    {
-      /* If the buffer might be too short, make it bigger.  */
-      if (op + 5 >= outend)
-	{
-	  register unsigned char *new;
-	  if (outlen == 0)
-	    {
-	      new = (unsigned char *) malloc (outlen = 40 + len);
-	      outend += 40;
-	    }
-	  else
-	    {
-	      outend += outlen;
-	      new = (unsigned char *) realloc (outstring, outlen *= 2);
-	    }
-	  op += new - outstring;
-	  outend += new - outstring;
-	  outstring = new;
-	}
-      if (!(c = *p++))
-	break;
-      if (c == '%')
-	{
-	  c = *p++;
-	  tem = *argp;
-	  switch (c)
-	    {
-	    case 'd':		/* %d means output in decimal */
-	      if (tem < 10)
-		goto onedigit;
-	      if (tem < 100)
-		goto twodigit;
-	    case '3':		/* %3 means output in decimal, 3 digits. */
-	      if (tem > 999)
-		{
-		  *op++ = tem / 1000 + '0';
-		  tem %= 1000;
-		}
-	      *op++ = tem / 100 + '0';
-	    case '2':		/* %2 means output in decimal, 2 digits. */
-	    twodigit:
-	      tem %= 100;
-	      *op++ = tem / 10 + '0';
-	    onedigit:
-	      *op++ = tem % 10 + '0';
-	      argp++;
-	      break;
-
-	    case 'C':
-	      /* For c-100: print quotient of value by 96, if nonzero,
-		 then do like %+ */
-	      if (tem >= 96)
-		{
-		  *op++ = tem / 96;
-		  tem %= 96;
-		}
-	    case '+':		/* %+x means add character code of char x */
-	      tem += *p++;
-	    case '.':		/* %. means output as character */
-	      if (left)
-		{
-		  /* If want to forbid output of 0 and \n,
-		     and this is one, increment it.  */
-		  if (tem == 0 || tem == '\n')
-		    {
-		      tem++;
-		      if (argp == oargp)
-			outend -= strlen (doleft = left);
-		      else
-			outend -= strlen (doup = up);
-		    }
-		}
-	      *op++ = tem;
-	    case 'f':		/* %f means discard next arg */
-	      argp++;
-	      break;
-
-	    case 'b':		/* %b means back up one arg (and re-use it) */
-	      argp--;
-	      break;
-
-	    case 'r':		/* %r means interchange following two args */
-	      argp[0] = argp[1];
-	      argp[1] = tem;
-	      oargp++;
-	      break;
-
-	    case '>':		/* %>xy means if arg is > char code of x, */
-	      if (argp[0] > *p++) /* then add char code of y to the arg, */
-		argp[0] += *p;	/* and in any case don't output. */
-	      p++;		/* Leave the arg to be output later. */
-	      break;
-
-	    case 'a':		/* %a means arithmetic */
-	      /* Next character says what operation.
-		 Add or subtract either a constant or some other arg */
-	      /* First following character is + to add or - to subtract
-		 or = to assign.  */
-	      /* Next following char is 'p' and an arg spec
-		 (0100 plus position of that arg relative to this one)
-		 or 'c' and a constant stored in a character */
-	      tem = p[2] & 0177;
-	      if (p[1] == 'p')
-		tem = argp[tem - 0100];
-	      if (p[0] == '-')
-		argp[0] -= tem;
-	      else if (p[0] == '+')
-		argp[0] += tem;
-	      else if (p[0] == '*')
-		argp[0] *= tem;
-	      else if (p[0] == '/')
-		argp[0] /= tem;
-	      else
-		argp[0] = tem;
-
-	      p += 3;
-	      break;
-
-	    case 'i':		/* %i means add one to arg, */
-	      argp[0] ++;	/* and leave it to be output later. */
-	      argp[1] ++;	/* Increment the following arg, too!  */
-	      break;
-
-	    case 'p':		/* %p means push nth arg. */
-	      tem = *p++ - '1';
-	      argp = oargp + tem;
-	      break;	
-	      
-	    case '%':		/* %% means output %; no arg. */
-	      goto ordinary;
-
-	    case 'n':		/* %n means xor each of next two args with 140 */
-	      argp[0] ^= 0140;
-	      argp[1] ^= 0140;
-	      break;
-
-	    case 'm':		/* %m means xor each of next two args with 177 */
-	      argp[0] ^= 0177;
-	      argp[1] ^= 0177;
-	      break;
-
-	    case 'B':		/* %B means express arg as BCD char code. */
-	      argp[0] += 6 * (tem / 10);
-	      break;
-
-	    case 'D':		/* %D means weird Delta Data transformation */
-	      argp[0] -= 2 * (tem % 16);
-	      break;
-	    }
-	}
-      else
-	/* Ordinary character in the argument string.  */
-      ordinary:
-	*op++ = c;
-    }
-  *op = 0;
-#ifdef __OpenBSD__
-  if (doleft)
-    strlcpy (op, doleft, sizeof(op));
-  if (doup)
-    strlcpy (op, doup, sizeof(op));
-  return outstring;
-#else
-  if (doleft)
-    strcpy (op, doleft);
-  if (doup)
-    strcpy (op, doup);
-  return outstring;
-#endif /* __OpenBSD__ */
-}
-#endif /* TERMCAP */
-
+/*
+ * Local Variables:
+ * c-basic-offset: 2
+ * End:
+ */
