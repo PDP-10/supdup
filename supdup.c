@@ -105,8 +105,6 @@ jmp_buf	peerdied;
 
 int unicode_translation = 0;
 
-extern int errno;
-
 /* Impoverished un*x keyboards */
 #define Ctl(c) ((c)&037)
 
