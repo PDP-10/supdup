@@ -823,27 +823,9 @@ supdup (char *loc)
               high_bits = 2;
               c &= 0177;
             }
-          if ((c & 0140) == 0)
-            {
-              switch (c)
-                {
-                case 010:
-                case 011:
-                case 012:
-                case 013:
-                case 014:
-                case 015:
-                case 032:
-                case 033:
-                case 037:
-                  break;
-                default:
-                  high_bits |= 1;
-                  c = c + '@';
-                  break;
-                }
-            }
-          if (high_bits)
+          if (c == ITP_ESCAPE)
+            *netfrontp++ = ITP_ESCAPE;
+          else if (high_bits)
             {
               *netfrontp++ = ITP_ESCAPE;
               *netfrontp++ = high_bits + 0100;
