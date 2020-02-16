@@ -1248,7 +1248,7 @@ void sup_options (int net)
                 {
                   read (net, temp, 6);
                   /* The 1 + is because supdup spec transmits 1 - columns */
-                  tcmxh = 1 + (temp[5] & 0377) | ((temp[4] & 0377) << 6);
+                  tcmxh = 1 + ((temp[5] & 0377) | ((temp[4] & 0377) << 6));
 #if 0
                   /* Un*x braindeath (tm) */
                   if (tcmxh >= 128 - 5) tcmxh = 128 - 5 - 1;
