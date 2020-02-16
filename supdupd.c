@@ -1162,7 +1162,7 @@ char	utmp[] = "/etc/utmp";
 
 void rmut (void)
 {
-  register f;
+  register int f;
   int found = 0;
 
   f = open (utmp, O_RDWR, 0);
