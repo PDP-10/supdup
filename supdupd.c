@@ -403,6 +403,8 @@ fatalperror (f, msg, errn)
   fatal (f, buf);
 }
 
+static void sig_handler_cleanup(int sig) { cleanup(); }
+
 /*
  * Main loop.  Select from pty and network, and
  * hand data to supdup receiver finite state machine.
@@ -416,7 +418,7 @@ supdup (f, p)
   ioctl (f, FIONBIO, &on);
   ioctl (p, FIONBIO, &on);
   signal (SIGTSTP, SIG_IGN);
-  signal (SIGCHLD, cleanup);
+  signal (SIGCHLD, sig_handler_cleanup);
   mode (ECHO|CRMOD, 0);
 
   /*
