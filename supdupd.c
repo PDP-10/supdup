@@ -1247,7 +1247,7 @@ sup_options (net)
 #if 0 /* No longer needed, since we now encode positions using %d */
               /* Un*x braindeath (tm) */
               if (tcmxv >= 128 - 5) tcmxv = 128 - 5 - 1;
-#endif 0
+#endif
               if (count--)
                 {
                   read (net, temp, 6);
@@ -1256,7 +1256,7 @@ sup_options (net)
 #if 0
                   /* Un*x braindeath (tm) */
                   if (tcmxh >= 128 - 5) tcmxh = 128 - 5 - 1;
-#endif 0
+#endif
                   if (count--)
                     {
                       read (net, temp, 6);
