@@ -369,15 +369,15 @@ doit (f, who)
   close (t);
 #ifdef BSD4_3
   /* Winning -p switch passes through environment */
-  execle ("/bin/login", "login", "-p", "-h", host, 0, envinit);
+  execle ("/bin/login", "login", "-p", "-h", host, (char *)0, envinit);
 #else
 #ifdef MIT
   /* Local /bin/login at ai.mit.edu machines hacked to pass TERM and TERMCAP */
-  execle ("/bin/login", "login", "-h", host, 0, envinit);
+  execle ("/bin/login", "login", "-h", host, (char *)0, envinit);
   fatalperror (2, "/bin/login", errno);
 #else
   /* Can't use /bin/login as that nukes TERM and TERMCAP.  Cretins! */
-  execle ("/usr/etc/supdup-login", "login", "-h", host, 0, envinit);
+  execle ("/usr/etc/supdup-login", "login", "-h", host, (char *)0, envinit);
   fatalperror (2, "/usr/etc/supdup-login", errno);
 #endif /* MIT */
 #endif /* not BSD4_3 */
