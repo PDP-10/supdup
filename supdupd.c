@@ -425,8 +425,7 @@ supdup (f, p)
    * Print supdup banner.
    */
   gethostname (hostname, sizeof (hostname));
-  sprintf (nfrontp, SBANNER, hostname, host);
-  nfrontp += strlen (nfrontp);
+  nfrontp += sprintf ((char *) nfrontp, SBANNER, hostname, host);
   *nfrontp++ = TDNOP;
   netflush ();
   sleep (2);
@@ -436,10 +435,9 @@ supdup (f, p)
    */
 
   *nfrontp++ = TDCLR;
-  sprintf (nfrontp, BANNER, hostname, "");
+  nfrontp += sprintf ((char *)nfrontp, BANNER, hostname, "");
   currline = 1;
   currcol = 0;
-  nfrontp += strlen (nfrontp);
   for (;;)
     {
       int ibits = 0, obits = 0;
