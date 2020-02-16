@@ -66,7 +66,7 @@ int pcc, ncc;
 int pty;
 /* Filedesc for stream connected to user (via internet) */
 int net;
-struct	sockaddr_in sin = { AF_INET };
+static struct	sockaddr_in sin = { AF_INET };
 int reapchild ();
 
 char pty_name[] = "/dev/ptyq0";
