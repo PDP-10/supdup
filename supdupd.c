@@ -32,6 +32,8 @@
 
 #include <netinet/in.h>
 
+#include <termios.h>
+
 /* #include <arpa/telnet.h> */
 #include "supdup.h"
 
@@ -305,7 +307,7 @@ doit (f, who)
 {
   char *cp = pty_name, *ntoa ();
   int i, p, cc, t;
-  struct sgttyb b;
+  struct termios b;
   struct hostent *hp;
 
   for (i = 0; i < 16; i++)
@@ -333,16 +335,16 @@ gotpty:
   t = open (cp, O_RDWR, 0);
   if (t < 0)
     fatalperror (f, cp, errno);
-  ioctl (t, TIOCGETP, &b);
+  tcgetattr (t, &b);
   /* MIT */
-  b.sg_ispeed = B9600;
-  b.sg_ospeed = B9600;
+  cfsetispeed(&b, B9600);
+  cfsetospeed(&b, B9600);
   /* MIT */
-  b.sg_flags = XTABS | ANYP;      /* punted CRMOD */
-  ioctl (t, TIOCSETP, &b);
-  ioctl (p, TIOCGETP, &b);
-  b.sg_flags &= ~ECHO;
-  ioctl (p, TIOCSETP, &b);
+  b.c_oflag |= XTABS;
+  tcsetattr (t, 0, &b);
+  tcgetattr (p, &b);
+  b.c_lflag &= ~ECHO;
+  tcsetattr (p, 0, &b);
   sup_options (f);
 #ifdef TIOCSWINSZ
   ioctl (p, TIOCSWINSZ, &ws);
@@ -419,7 +421,7 @@ supdup (f, p)
   ioctl (p, FIONBIO, &on);
   signal (SIGTSTP, SIG_IGN);
   signal (SIGCHLD, sig_handler_cleanup);
-  mode (ECHO|CRMOD, 0);
+  change_lflag (ECHO, 0);
 
   /*
    * Print supdup banner.
@@ -1064,16 +1066,16 @@ suprcv ()
     }
 }
 
-mode (on, off)
+change_lflag (on, off)
      int on, off;
 {
-  struct sgttyb b;
+  struct termios b;
 
   ptyflush ();
-  ioctl (pty, TIOCGETP, &b);
-  b.sg_flags |= on;
-  b.sg_flags &= ~off;
-  ioctl (pty, TIOCSETP, &b);
+  tcgetattr (pty, &b);
+  b.c_lflag |= on;
+  b.c_lflag &= ~off;
+  tcsetattr (pty, 0, &b);
 }
 
 ptyflush ()
