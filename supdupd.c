@@ -36,6 +36,7 @@
 #include "supdup.h"
 
 #include <stdio.h>
+#include <string.h>
 #include <signal.h>
 #include <errno.h>
 #include <sgtty.h>
@@ -397,9 +398,8 @@ fatalperror (f, msg, errn)
      int errn;
 {
   char buf[BUFSIZ];
-  extern char *sys_errlist[];
 
-  (void) sprintf (buf, "%s: %s", msg, sys_errlist[errn]);
+  (void) sprintf (buf, "%s: %s", msg, strerror(errn));
   fatal (f, buf);
 }
 
