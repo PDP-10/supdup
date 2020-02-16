@@ -263,7 +263,7 @@ main (argc, argv)
 
 reapchild ()
 {
-  union wait status;
+  int status;
 
   while (wait3 (&status, WNOHANG, 0) > 0)
     ;
