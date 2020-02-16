@@ -77,7 +77,20 @@ int pty;
 /* Filedesc for stream connected to user (via internet) */
 int net;
 static struct	sockaddr_in sin = { AF_INET };
-int reapchild ();
+void reapchild (void);
+void doit (int f, struct sockaddr_in *who);
+void fatal (int f, char *msg);
+void fatalperror (int f, char *msg, int errn);
+void sup_options (int net);
+void supdup (int f, int p);
+void change_lflag (int on, int off);
+void ptyflush (void);
+void netflush (void);
+void supxmit (void);
+void suprcv (void);
+void do_crlf (void);
+void cleanup (void);
+void rmut (void);
 
 char pty_name[FILENAME_MAX];
 #ifdef TTYLOC
@@ -106,7 +119,7 @@ int columns, lines;
 
 FILE *debug_output = 0;
 void
-open_debug_output ()
+open_debug_output (void)
 {
   debug_output = fopen ("/supdupd.debug", "w");
   if (debug_output < 0)
@@ -121,8 +134,7 @@ open_debug_output ()
 
 #if 0
 /* this routine is used for debugging only */
-echo_char (c)
-     unsigned char c;
+void echo_char (unsigned char c)
 {
   static int count = 0;
 
@@ -140,9 +152,7 @@ echo_char (c)
 
 
 #ifdef DAEMON
-main (argc, argv)
-     int argc;
-     char *argv[];
+int main (int argc, char *argv[])
 {
   int s, pid, options;
   struct servent *sp;
@@ -238,9 +248,7 @@ again:
 }
 
 #else /* not DAEMON */
-main (argc, argv)
-     int argc;
-     char *argv[];
+int main (int argc, char *argv[])
 {
   struct sockaddr_in from;
   socklen_t fromlen = sizeof(from);
@@ -270,7 +278,7 @@ main (argc, argv)
 #endif /* DAEMON */
 
 
-reapchild ()
+void reapchild (void)
 {
   int status;
 
@@ -298,8 +306,6 @@ char *envinit[] =
     0
   };
 
-int cleanup ();
-
 char *host;
 #ifdef TIOCSWINSZ
 struct winsize ws;
@@ -308,9 +314,7 @@ struct winsize ws;
 /*
  * Get a pty, scan input lines.
  */
-doit (f, who)
-     int f;
-     struct sockaddr_in *who;
+void doit (int f, struct sockaddr_in *who)
 {
   char *cp, *ntoa ();
   int i, p, cc, t;
@@ -384,9 +388,7 @@ doit (f, who)
   /*NOTREACHED*/
 }
 
-fatal (f, msg)
-     int f;
-     char *msg;
+void fatal (int f, char *msg)
 {
   char buf[BUFSIZ];
 
@@ -395,10 +397,7 @@ fatal (f, msg)
   exit (1);
 }
 
-fatalperror (f, msg, errn)
-     int f;
-     char *msg;
-     int errn;
+void fatalperror (int f, char *msg, int errn)
 {
   char buf[BUFSIZ];
 
@@ -412,7 +411,7 @@ static void sig_handler_cleanup(int sig) { cleanup(); }
  * Main loop.  Select from pty and network, and
  * hand data to supdup receiver finite state machine.
  */
-supdup (f, p)
+void supdup (int f, int p)
 {
   int on = 1;
   char hostname[256];
@@ -531,7 +530,7 @@ supdup (f, p)
  * this sh*t?)
  */
 
-supxmit ()
+void supxmit (void)
 {
   static int state = XS_DATA;
   register int c;
@@ -825,7 +824,7 @@ supxmit ()
     }
 }
 
-do_crlf ()
+void do_crlf (void)
 {
   currcol = 0;
   if (currline < (lines - 1))
@@ -880,7 +879,7 @@ do_crlf ()
    location string */
 #define	RS_LOCATION	7
 
-suprcv ()
+void suprcv (void)
 {
   register int	c;
 
@@ -1066,8 +1065,7 @@ suprcv ()
     }
 }
 
-change_lflag (on, off)
-     int on, off;
+void change_lflag (int on, int off)
 {
   struct termios b;
 
@@ -1078,7 +1076,7 @@ change_lflag (on, off)
   tcsetattr (pty, 0, &b);
 }
 
-ptyflush ()
+void ptyflush (void)
 {
   int n;
 
@@ -1091,7 +1089,7 @@ ptyflush ()
     pbackp = pfrontp = ptyobuf;
 }
 
-netflush ()
+void netflush (void)
 {
   int n;
 
@@ -1118,7 +1116,7 @@ netflush ()
     nbackp = nfrontp = netobuf;
 }
 
-cleanup ()
+void cleanup (void)
 {
 #ifdef TERMINFO
   clean_terminfo ();
@@ -1137,7 +1135,7 @@ cleanup ()
 #ifdef	TERMINFO
 /* Cleans up the files created for the TERMINFO stuff.
  */
-clean_terminfo ()
+clean_terminfo (void)
 {
   char	dir[128];
   int	pid;
@@ -1162,7 +1160,7 @@ char	utmp[] = "/etc/utmp";
 #define SCPYN(a, b)	strncpy (a, b, sizeof (a))
 #define SCMPN(a, b)	strncmp (a, b, sizeof (a))
 
-rmut ()
+void rmut (void)
 {
   register f;
   int found = 0;
@@ -1210,8 +1208,7 @@ rmut ()
  * to base 256 d.d.d.d representation.
  */
 char *
-ntoa (in)
-     struct in_addr in;
+ntoa (struct in_addr in)
 {
   static char b[18];
   register char *p;
@@ -1225,8 +1222,7 @@ ntoa (in)
 /* Read the 36 bit options from the net setting variables and create
  * the TERMCAP environment variable.
  */
-sup_options (net)
-     int net;
+void sup_options (int net)
 {
   char temp[6];
   int count;
@@ -1400,7 +1396,7 @@ char	String_Table[] = {
 /* This routine sets up the files and environment variables for using the
  * TERMINFO data base.
  */
-init_terminfo ()
+void init_terminfo (void )
 {
   register int i;
   int	file;
