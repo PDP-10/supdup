@@ -243,13 +243,13 @@ main (argc, argv)
      char *argv[];
 {
   struct sockaddr_in from;
-  int fromlen;
+  socklen_t fromlen = sizeof(from);
 
 #ifdef DEBUG
   open_debug_output ();
 #endif /* DEBUG */
   fromlen = sizeof (from);
-  if (getpeername (0, &from, &fromlen) < 0)
+  if (getpeername (0, (struct sockaddr *)&from, &fromlen) < 0)
     {
       fprintf (stderr, "%s: ", argv[0]);
       perror ("getpeername");
