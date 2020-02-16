@@ -1178,7 +1178,7 @@ rmut ()
           lseek (f, - (long)sizeof (wtmp), 1);
           SCPYN (wtmp.ut_name, "");
           SCPYN (wtmp.ut_host, "");
-          time (&wtmp.ut_time);
+          wtmp.ut_time = time (NULL);
           write (f, (char *) &wtmp, sizeof (wtmp));
           found++;
         }
@@ -1192,7 +1192,7 @@ rmut ()
           SCPYN (wtmp.ut_line, pty_name + strlen ("/dev/"));
           SCPYN (wtmp.ut_name, "");
           SCPYN (wtmp.ut_host, "");
-          time (&wtmp.ut_time);
+          wtmp.ut_time = time (NULL);
           lseek (f, (long) 0, 2);
           write (f, (char *) &wtmp, sizeof (wtmp));
           close (f);
