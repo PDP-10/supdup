@@ -26,22 +26,27 @@
 				/* there should be a TERMCAP too */
 
 #define _XOPEN_SOURCE 500 /* for unlockpt and ptsname */
+#define _DEFAULT_SOURCE
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 
 #include <netinet/in.h>
 
+#include <unistd.h>
 #include <termios.h>
 
 /* #include <arpa/telnet.h> */
 #include "supdup.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <time.h>
 #include <errno.h>
 #include <sgtty.h>
 #include <netdb.h>
