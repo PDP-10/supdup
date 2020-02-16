@@ -443,34 +443,33 @@ supdup (f, p)
   currcol = 0;
   for (;;)
     {
-      int ibits = 0, obits = 0;
+      fd_set ibits, obits;
       register int c;
+      int maxfd = p > f ? p : f;
+
+      FD_ZERO(&ibits);
+      FD_ZERO(&obits);
 
       /*
        * Never look for input if there's still
        * stuff in the corresponding output buffer
        */
       if ((nfrontp - nbackp) || pcc > 0)
-        obits |= (1 << f);
+        FD_SET(f, &obits);
       else
-        ibits |= (1 << p);
+        FD_SET(p, &ibits);
       if ((pfrontp - pbackp) || ncc > 0)
-        obits |= (1 << p);
+        FD_SET(p, &obits);
       else
-        ibits |= (1 << f);
+        FD_SET(f, &ibits);
       if (ncc < 0 && pcc < 0)
         break;
-      select (16, &ibits, &obits, 0, 0);
-      if (ibits == 0 && obits == 0)
-        {
-          sleep (5);
-          continue;
-        }
+      select (maxfd + 1, &ibits, &obits, NULL, NULL);
 
       /*
        * Something to read from the network...
        */
-      if (ibits & (1 << f))
+      if (FD_ISSET(f, &ibits))
         {
           ncc = read (f, netibuf, BUFSIZ);
           if (ncc < 0 && errno == EWOULDBLOCK)
@@ -486,7 +485,7 @@ supdup (f, p)
       /*
        * Something to read from the pty...
        */
-      if (ibits & (1 << p))
+      if (FD_ISSET(p, &ibits))
         {
           pcc = read (p, ptyibuf, BUFSIZ);
           if (pcc < 0 && errno == EWOULDBLOCK)
@@ -501,11 +500,11 @@ supdup (f, p)
 
       if (pcc > 0)
         supxmit ();
-      if ((obits & (1 << f)) && (nfrontp - nbackp) > 0)
+      if (FD_ISSET(f, &obits) && (nfrontp - nbackp) > 0)
         netflush ();
       if (ncc > 0)
         suprcv ();
-      if ((obits & (1 << p)) && (pfrontp - pbackp) > 0)
+      if (FD_ISSET(p, &obits) && (pfrontp - pbackp) > 0)
         ptyflush ();
     }
   cleanup ();
