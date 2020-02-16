@@ -48,7 +48,7 @@
 #define ITP_CURSORPOS 020	/* user sends vpos/hpos */
 #define ITP_FLOW_CONTROL_START 032 /* Set buffer to zero -- ignored */
 #define ITP_FLOW_CONTROL_INCREASE 001 /* increase buffer size -- ignored */
-#define ITP_FLOW_CONTROL_END 009 /* Set buffer to infinity -- ignored */
+#define ITP_FLOW_CONTROL_END 011 /* Set buffer to infinity -- ignored */
 #define ITP_PIATY 003		/* user says her screen is messed-up
 				 we don't (can't) hack this */
 #define ITP_STOP_OUTPUT 023	/* Ignore it */
