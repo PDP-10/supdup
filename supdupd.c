@@ -75,7 +75,6 @@ char ttyloc[64];
 #endif /* TTYLOC */
 
 extern char **environ;
-extern int errno;
 
 
 /* Current cursor position */
@@ -392,15 +391,15 @@ fatal (f, msg)
   exit (1);
 }
 
-fatalperror (f, msg, errno)
+fatalperror (f, msg, errn)
      int f;
      char *msg;
-     int errno;
+     int errn;
 {
   char buf[BUFSIZ];
   extern char *sys_errlist[];
 
-  (void) sprintf (buf, "%s: %s", msg, sys_errlist[errno]);
+  (void) sprintf (buf, "%s: %s", msg, sys_errlist[errn]);
   fatal (f, buf);
 }
 
