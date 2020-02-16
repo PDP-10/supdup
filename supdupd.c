@@ -76,7 +76,9 @@ int pcc, ncc;
 int pty;
 /* Filedesc for stream connected to user (via internet) */
 int net;
+#ifdef DAEMON
 static struct	sockaddr_in sin = { AF_INET };
+#endif
 void reapchild (void);
 void doit (int f, struct sockaddr_in *who);
 void fatal (int f, char *msg);
@@ -317,7 +319,7 @@ struct winsize ws;
 void doit (int f, struct sockaddr_in *who)
 {
   char *cp, *ntoa ();
-  int i, p, cc, t;
+  int i, p, t;
   struct termios b;
   struct hostent *hp;
 
@@ -443,7 +445,6 @@ void supdup (int f, int p)
   for (;;)
     {
       fd_set ibits, obits;
-      register int c;
       int maxfd = p > f ? p : f;
 
       FD_ZERO(&ibits);
@@ -1040,7 +1041,6 @@ void suprcv (void)
           {
             static char buf[BUFSIZ];
             static char *p = &buf[0];
-            int f;
 
             if (c != '\000')
               {
@@ -1050,7 +1050,7 @@ void suprcv (void)
             else
               {
 #ifdef TTYLOC
-                f = creat (ttyloc, 0644);
+                int f = creat (ttyloc, 0644);
                 if (f > 0)
                   {
                     (void) write (f, buf, p - buf);
