@@ -288,7 +288,7 @@ void reapchild (void)
 
 /* #ifdef TERMCAP */
 char termcap[1024];
-/* #endif /* TERMCAP */
+/* #endif // TERMCAP */
 
 #ifdef TERMINFO
 char terminfo[64];
@@ -299,7 +299,7 @@ char *envinit[] =
     "TERM=supdup",
 /* #ifdef TERMCAP */
     termcap,
-/* #endif /* TERMCAP */
+/* #endif // TERMCAP */
 #ifdef TERMINFO
     terminfo,
 #endif /* TERMINFO */
