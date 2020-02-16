@@ -25,6 +25,8 @@
 /* #define TERMINFO 1 */	/* Define if want terminfo support. */
 				/* there should be a TERMCAP too */
 
+#define _XOPEN_SOURCE 500 /* for unlockpt and ptsname */
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -72,7 +74,7 @@ int net;
 static struct	sockaddr_in sin = { AF_INET };
 int reapchild ();
 
-char pty_name[] = "/dev/ptyq0";
+char pty_name[FILENAME_MAX];
 #ifdef TTYLOC
 char ttyloc[64];
 #endif /* TTYLOC */
@@ -305,27 +307,21 @@ doit (f, who)
      int f;
      struct sockaddr_in *who;
 {
-  char *cp = pty_name, *ntoa ();
+  char *cp, *ntoa ();
   int i, p, cc, t;
   struct termios b;
   struct hostent *hp;
 
-  for (i = 0; i < 16; i++)
-    {
-      cp[strlen ("/dev/ptyq")] = "0123456789abcdef"[i];
-      p = open (cp, O_RDWR, 0);
-      if (p > 0)
-        goto gotpty;
-    }
-  fatal (f, "All network ports in use");
-  /*NOTREACHED*/
-gotpty:
+  p = open ("/dev/ptmx", O_RDWR, 0);
+  if (p < 0)
+    fatal (f, "Couldn't get a pty");
+  if (grantpt(p) < 0)
+    fatalperror (f, "grantpt", errno);
+  if (unlockpt(p) < 0)
+    fatalperror (f, "unlockpt", errno);
+  if ((cp = ptsname(p)) == NULL)
+    fatalperror (f, "ptsname", errno);
   dup2 (f, 0);
-  cp[strlen ("/dev/")] = 't';
-#ifdef TTYLOC
-  sprintf (ttyloc, "/tmp/ttyq%c.ttyloc", cp[strlen ("/dev/ttyq")]);
-  unlink (ttyloc);
-#endif /* TTYLOC */
   t = open ("/dev/tty", O_RDWR, 0);
   if (t >= 0)
     {
