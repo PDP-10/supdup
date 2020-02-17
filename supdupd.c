@@ -1127,7 +1127,10 @@ void cleanup (void)
 #ifdef TTYLOC
   unlink (ttyloc);
 #endif /* TTYLOC */
+
+#ifdef __linux__
   vhangup ();                   /* XXX */
+#endif
   shutdown (net, 2);
   kill (0, SIGKILL);
   exit (1);
