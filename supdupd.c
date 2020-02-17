@@ -33,6 +33,7 @@
 #include <sys/wait.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/select.h>
 
 #include <netinet/in.h>
 
