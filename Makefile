@@ -6,16 +6,22 @@ CFLAGS = -g -Wall
 LDFLAGS = -g
 OBJS = supdup.o charmap.o
 LIBS = -lncurses
-EXEC = supdup
+CLIENT = supdup
+SERVER = supdupd
 CC = cc
 
-all:	$(EXEC)
+# The server isn't ready for prime time.
+all:	$(CLIENT)
 
-$(EXEC): $(OBJS)
-	$(CC) $(LDFLAGS) -o $(EXEC) $(OBJS) $(LIBS)
+$(CLIENT): $(OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-install: supdup
+$(SERVER): supdupd.o
+	$(CC) $(LDFLAGS) -o $@ $^
+
+install: $(CLIENT) $(SERVER)
 	install -m 0755 supdup ${PREFIX}/bin
+	test -x supdupd && install -m 0755 supdupd ${PREFIX}/bin
 
 clean:
-	rm -f $(EXEC) $(OBJS)
+	rm -f $(CLIENT) $(SERVER) $(OBJS)
