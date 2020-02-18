@@ -205,7 +205,7 @@ int main (int argc, char *argv[])
   }
 #endif /* DEBUG */
 again:
-  s = socket (AF_INET, SOCK_STREAM, 0, 0);
+  s = socket (AF_INET, SOCK_STREAM, 0);
   if (s < 0)
     {
       perror ("supdupd: socket");;
@@ -217,7 +217,7 @@ again:
       perror ("telnetd: setsockopt (SO_DEBUG)");
   if (setsockopt (s, SOL_SOCKET, SO_KEEPALIVE, 0, 0) < 0)
     perror ("supdupd: setsockopt (SO_KEEPALIVE)");
-  while (bind (s, (caddr_t) &sin, sizeof (sin), 0) < 0)
+  while (bind (s, (caddr_t) &sin, sizeof (sin)) < 0)
     {
       perror ("supdupd: bind");
       sleep (5);
