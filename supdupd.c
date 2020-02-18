@@ -384,8 +384,10 @@ void doit (int f, struct sockaddr_in *who)
   fatalperror (2, "/bin/login", errno);
 #else
   /* Can't use /bin/login as that nukes TERM and TERMCAP.  Cretins! */
-  execle ("/usr/etc/supdup-login", "login", "-h", host, (char *)0, envinit);
-  fatalperror (2, "/usr/etc/supdup-login", errno);
+  /* For now, be a cretin and use /bin/login anyway. */
+  /* execle ("/usr/etc/supdup-login", "login", "-h", host, (char *)0, envinit);
+     fatalperror (2, "/usr/etc/supdup-login", errno); */
+  execle ("/bin/login", "login", (char *)0, envinit);
 #endif /* MIT */
 #endif /* not BSD4_3 */
   /*NOTREACHED*/
