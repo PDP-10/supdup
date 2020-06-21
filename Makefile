@@ -2,10 +2,19 @@
 
 PREFIX ?= /usr/local
 
+OS_NAME = $(shell uname)
+ifeq ($(OS_NAME), Darwin)
+OS = OSX
+endif
+
+
 CFLAGS = -g -Wall
-LDFLAGS = -g
+# Mac OSX
+ifeq ($(OS), OSX)
+LDFLAGS = -L/opt/local/lib
+endif
 OBJS = supdup.o charmap.o
-LIBS = -lncurses
+LIBS = -lncurses -lresolv
 CLIENT = supdup
 SERVER = supdupd
 CC = cc
@@ -14,7 +23,7 @@ CC = cc
 all:	$(CLIENT)
 
 $(CLIENT): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 $(SERVER): supdupd.o
 	$(CC) $(LDFLAGS) -o $@ $^

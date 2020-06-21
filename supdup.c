@@ -30,6 +30,10 @@
  *  Try multiple other host addresses if first fails.
  */
 
+#ifndef USE_CHAOS_STREAM_SOCKET
+#define USE_CHAOS_STREAM_SOCKET 1
+#endif
+
 #ifndef USE_TERMIOS
 #define USE_TERMIOS 1		/* e.g. Linux */
 #endif
@@ -43,6 +47,13 @@
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
+#if USE_CHAOS_STREAM_SOCKET
+#include <sys/un.h>
+#include <sys/stat.h>
+#include <arpa/nameser.h>
+#include <resolv.h>
+#endif
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -89,8 +100,10 @@ int options;
 int debug = 0;
 FILE *tdebug_file = 0;	/* For debugging terminal output */
 FILE *indebug_file = 0;	/* For debugging network input */
+FILE *outdebug_file = 0;	/* For debugging network output */
 #define TDEBUG_FILENAME "supdup-trmout"
 #define INDEBUG_FILENAME "supdup-netin"
+#define OUTDEBUG_FILENAME "supdup-netout"
 
 /* 0377 if terminal has a meta-key */
 int mask = 0177;
@@ -172,6 +185,144 @@ struct termios otio;
 int mode(int);
 void ttyoflush(void);
 
+#if USE_CHAOS_STREAM_SOCKET
+
+#ifndef CHAOS_SOCKET_DIRECTORY
+#define CHAOS_SOCKET_DIRECTORY "/tmp"
+#endif
+#ifndef CHAOS_ADDRESS_DOMAIN
+#define CHAOS_ADDRESS_DOMAIN "ch-addr.net"
+#endif
+#ifndef CHAOS_NAME_DOMAIN
+#define CHAOS_NAME_DOMAIN "chaosnet.net"
+#endif
+#ifndef CHAOS_DNS_SERVER
+#define CHAOS_DNS_SERVER "130.238.19.25"
+#endif
+
+static int chaosp = 0;
+
+static int
+connect_to_named_socket(int socktype, char *path)
+{
+  int sock, slen;
+  struct sockaddr_un local, server;
+  
+  local.sun_family = AF_UNIX;
+  sprintf(local.sun_path, "%s/%s_%d", CHAOS_SOCKET_DIRECTORY, path, getpid());
+  if (unlink(local.sun_path) < 0) {
+    //perror("unlink(chaos_sockfile)");
+  } 
+  
+  if ((sock = socket(AF_UNIX, socktype, 0)) < 0) {
+    perror("socket(AF_UNIX)");
+    exit(1);
+  }
+  slen = strlen(local.sun_path)+ 1 + sizeof(local.sun_family);
+  if (bind(sock, (struct sockaddr *)&local, slen) < 0) {
+    perror("bind(local)");
+    exit(1);
+  }
+  if (chmod(local.sun_path, 0777) < 0)
+    perror("chmod(local, 0777)");
+  
+  server.sun_family = AF_UNIX;
+  sprintf(server.sun_path, "%s/%s", CHAOS_SOCKET_DIRECTORY, path);
+  slen = strlen(server.sun_path)+ 1 + sizeof(server.sun_family);
+
+  if (connect(sock, (struct sockaddr *)&server, slen) < 0) {
+    perror("connect(server)");
+    exit(1);
+  }
+  return sock;
+}
+
+struct __res_state chres;
+void
+init_chaos_dns()
+{
+  res_state statp = &chres;
+
+  // initialize resolver library
+  if (res_ninit(statp) < 0) {
+    fprintf(stderr,"Can't init statp\n");
+    exit(1);
+  }
+  // make sure to make recursive requests
+  statp->options |= RES_RECURSE;
+  // change nameserver
+  if (inet_aton(CHAOS_DNS_SERVER, &statp->nsaddr_list[0].sin_addr) < 0) {
+    perror("inet_aton (chaos_dns_server does not parse)");
+    exit(1);
+  } else {
+    statp->nsaddr_list[0].sin_family = AF_INET;
+    statp->nsaddr_list[0].sin_port = htons(53);
+    statp->nscount = 1;
+  }
+  // what about the timeout? RES_TIMEOUT=5s, statp->retrans (RES_MAXRETRANS=30 s? ms?), ->retry (RES_DFLRETRY=2, _MAXRETRY=5)
+}
+
+// given a domain name (including ending period!) and addr of a u_short vector,
+// fill in all Chaosnet addresses for it, and return the number of found addresses.
+// Use e.g. for verification when a new TLS conn is created (both server and client end?)
+int 
+dns_addrs_of_name(u_char *namestr, u_short *addrs, int addrs_len)
+{
+  res_state statp = &chres;
+  char a_dom[NS_MAXDNAME];
+  int a_addr;
+  char qstring[NS_MAXDNAME];
+  u_char answer[NS_PACKETSZ];
+  int anslen;
+  ns_msg m;
+  ns_rr rr;
+  int i, ix = 0, offs;
+
+  sprintf(qstring,"%s.", namestr);
+
+  if ((anslen = res_nquery(statp, qstring, ns_c_chaos, ns_t_a, (u_char *)&answer, sizeof(answer))) < 0) {
+    // fprintf(stderr,"DNS: addrs of %s failed, errcode %d: %s\n", qstring, statp->res_h_errno, hstrerror(statp->res_h_errno));
+    return -1;
+  }
+
+  if (ns_initparse((u_char *)&answer, anslen, &m) < 0) {
+    fprintf(stderr,"ns_init_parse failure code %d",statp->res_h_errno);
+    return -1;
+  }
+
+  if (ns_msg_getflag(m, ns_f_rcode) != ns_r_noerror) {
+    // if (trace_dns) 
+    fprintf(stderr,"DNS: bad response code %d\n", ns_msg_getflag(m, ns_f_rcode));
+    return -1;
+  }
+  if (ns_msg_count(m, ns_s_an) < 1) {
+    // if (trace_dns) 
+    fprintf(stderr,"DNS: bad answer count %d\n", ns_msg_count(m, ns_s_an));
+    return -1;
+  }
+  for (i = 0; i < ns_msg_count(m, ns_s_an); i++) {
+    if (ns_parserr(&m, ns_s_an, i, &rr) < 0) { 
+      // if (trace_dns)
+      fprintf(stderr,"DNS: failed to parse answer RR %d\n", i);
+      return -1;
+    }
+    if (ns_rr_type(rr) == ns_t_a) {
+      if (((offs = dn_expand(ns_msg_base(m), ns_msg_end(m), ns_rr_rdata(rr), (char *)&a_dom, sizeof(a_dom))) < 0)
+	  ||
+	  ((a_addr = ns_get16(ns_rr_rdata(rr)+offs)) < 0))
+	return -1;
+      if (strncasecmp(a_dom, CHAOS_ADDRESS_DOMAIN, strlen(CHAOS_ADDRESS_DOMAIN)) == 0) {
+	// only use addresses in "our" address domain
+	if (ix < addrs_len) {
+	  addrs[ix++] = a_addr;
+	}
+      } 
+    } 
+  }
+  return ix;
+}
+#endif // USE_CHAOS_STREAM_SOCKET
+
 int putch (int c)
 {
   *ttyfrontp++ = c;
@@ -202,10 +353,40 @@ void put_newline ()
   tputs (tparm (cursor_address, l, c), lines, putch)
 
 char *hostname;
+#if USE_CHAOS_STREAM_SOCKET
+char *contact = "SUPDUP";
+#endif
 
 void
 get_host (char *name)
 {
+#if USE_CHAOS_STREAM_SOCKET
+  int naddrs = 0;
+  u_short haddrs[4];
+
+  // this is just to see it's really a Chaos host - the address is not used in Supdup, only the name
+  if ((sscanf(name, "%ho", &haddrs[0]) == 1) && 
+      (haddrs[0] > 0xff) && (haddrs[0] < 0xfe00) && ((haddrs[0] & 0xff) != 0)) {
+    hostname = name;
+    chaosp = 1;
+    return;
+  }
+  else if ((naddrs = dns_addrs_of_name((u_char *)name, (u_short *)&haddrs, 4)) > 0) {
+    hostname = name;
+    chaosp = 1;
+    return;
+  } else if (index(name, '.') == NULL) {
+    char buf[256];
+    sprintf(buf, "%s.%s", name, CHAOS_NAME_DOMAIN);
+    if (dns_addrs_of_name((u_char *)buf, (u_short *)&haddrs, 4) > 0) {
+      hostname = strdup(buf);
+      chaosp = 1;
+      return;
+    }
+  }
+  chaosp = 0;
+#endif
+
   struct hostent *host;
   host = gethostbyname (name);
   if (host)
@@ -240,8 +421,9 @@ main (int argc, char **argv)
   if (sp == 0)
     {
       fprintf (stderr, "supdup: tcp/supdup: unknown service.\n");
-      exit (1);
+      sp->s_port = 79; // standard
     }
+
 #if !USE_TERMIOS
   ioctl (0, TIOCGETP, (char *) &ottyb);
   ioctl (0, TIOCGETC, (char *) &otc);
@@ -299,6 +481,13 @@ main (int argc, char **argv)
 		   INDEBUG_FILENAME);
           exit (1);
         }
+      outdebug_file = fopen(OUTDEBUG_FILENAME, "wb"); /* Open for binary write */
+      if (outdebug_file == NULL)
+        {
+          fprintf (stderr, "Couldn't open debug file %s\n",
+		   OUTDEBUG_FILENAME);
+          exit (1);
+        }
     }
   if (argc > 1 && !strcmp(argv[1], "-loc"))
     {
@@ -329,6 +518,10 @@ main (int argc, char **argv)
       argc--;
       unicode_translation = 0;
     }
+
+#if USE_CHAOS_STREAM_SOCKET
+  init_chaos_dns();
+#endif
 
   if (argc == 1)
     {
@@ -373,6 +566,11 @@ main (int argc, char **argv)
   tsin.sin_port = sp->s_port;
   if (argc == 3)
     {
+#if USE_CHAOS_STREAM_SOCKET
+      if (chaosp)
+	contact = argv[2];
+      else {
+#endif
       tsin.sin_port = atoi (argv[2]);
       if (tsin.sin_port <= 0)
         {
@@ -380,8 +578,16 @@ main (int argc, char **argv)
           exit(1);
         }
       tsin.sin_port = htons (tsin.sin_port);
+#if USE_CHAOS_STREAM_SOCKET
+      }
+#endif
     }
 
+#if USE_CHAOS_STREAM_SOCKET
+  if (chaosp)
+    net = connect_to_named_socket(SOCK_STREAM, "chaos_stream");
+  else
+#endif
   net = socket (AF_INET, SOCK_STREAM, 0);
   if (net < 0)
     {
@@ -399,6 +605,31 @@ main (int argc, char **argv)
     perror ("setsockopt (SO_DEBUG)");
   signal (SIGINT, intr);
   signal (SIGPIPE, deadpeer);
+#if USE_CHAOS_STREAM_SOCKET
+  if (chaosp) {
+  printf("Trying %s %s...", hostname, contact);
+  fflush (stdout);
+  dprintf(net, "RFC %s %s\r\n", hostname, contact);
+  netflush(0);
+  {
+    char buf[256], *bp, cbuf[2];
+    bp = buf;
+    while (read(net, cbuf, 1) == 1) {
+      if ((cbuf[0] != '\r') && (cbuf[0] != '\n'))
+	*bp++ = cbuf[0];
+      else {
+	*bp = '\0';
+	break;
+      }
+    }
+    if (strncmp(buf,"OPN ", 4) != 0) {
+      fprintf(stderr,"%s\n", buf);
+      exit(1);
+    } else
+      printf("%s\n", &buf[4]);
+  }
+  } else {
+#endif
   printf("Trying %s ...", inet_ntoa (tsin.sin_addr));
   fflush (stdout);
   if (connect (net, (struct sockaddr *) &tsin, sizeof (tsin)) < 0)
@@ -408,6 +639,9 @@ main (int argc, char **argv)
       signal (SIGINT, SIG_DFL);
       exit(1);
     }
+#if USE_CHAOS_STREAM_SOCKET
+  }
+#endif
   connected = 1;
   printf ("Connected to %s.\n", hostname);
   printf ("Escape character is \"%s\".", key_name (escape_char));
@@ -643,10 +877,12 @@ read_char (void)
 	{
 #if USE_BSD_SELECT
 	  readfds = 1 << fileno (stdin);
-	  select(32, &readfds, 0, 0, 0, 0);
+	  if (select(32, &readfds, 0, 0, 0, 0) < 0)
+	    perror("select(read_char)");
 #else
 	  FD_SET(fileno(stdin),&readfds);
-	  select(fileno(stdin)+1, &readfds, 0, 0, 0);
+	  if (select(fileno(stdin)+1, &readfds, 0, 0, 0) < 0) 
+	    perror("select(read_char)");
 #endif
         }
     }
@@ -666,7 +902,8 @@ supdup (char *loc)
   fd_set ibits, obits;
 #endif
 
-  ioctl (net, FIONBIO, &on);
+  if (ioctl (net, FIONBIO, &on) < 0)
+    perror("ioctl(FIONBIO)");
 
   for (c = 0; c < INIT_LEN;)
     *netfrontp++ = inits[c++];
@@ -712,7 +949,8 @@ supdup (char *loc)
       if (scc < 0 && tcc < 0)
         break;
 #if USE_BSD_SELECT
-      select (16, &ibits, &obits, 0, 0);
+      if (select (16, &ibits, &obits, 0, 0) < 0)
+	perror("select");
       if (ibits == 0 && obits == 0)
 	{
           sleep (5);
@@ -1163,6 +1401,7 @@ suprcv (void)
       c = *sbp++ & 0377; scc--;
 //      if(c>=0&&c<128)
 //        printf("State: %d, Incoming: %d. Translation: %s\n", state, c, charmap[c].name);
+      if (debug) fprintf(stderr,"State: %d, Incoming: %#o. Translation: %s\n", state, c, charmap[c].name);
       switch (state)
         {
         case SR_DATA:
@@ -1247,6 +1486,7 @@ suprcv (void)
             case TDNOP:
               continue;
             case TDORS:         /* ignore interrupts and */
+	      if (debug) fprintf(stderr,"TDORS at %d %d\n", currline, currcol);
 	      netflush (0);     /* send cursorpos back every time */
 	      *netfrontp++ = ITP_ESCAPE;
 	      *netfrontp++ = ITP_CURSORPOS;
@@ -1433,14 +1673,15 @@ ttyoflush (void)
 void
 netflush (int dont_die)
 {
-  int n;
+  int n, m;
   unsigned char *back = netobuf;
 
   while ((n = netfrontp - back) > 0)
     {
-      n = write (net, back, n);
-      if (n < 0)
+      m = write (net, back, n);
+      if (m < 0)
         {
+	  if (debug) perror("write");
           if (errno == ENOBUFS || errno == EWOULDBLOCK)
             return;
           if (dont_die)
@@ -1451,6 +1692,11 @@ netflush (int dont_die)
           longjmp (peerdied, -1);
           /*NOTREACHED*/
         }
+      else if (n != m)
+	fprintf(stderr,"should write %d, wrote %d\n", n, m);
+      n = m;
+      if (outdebug_file)
+	fwrite(back, n, 1, outdebug_file);
       back += n;
     }
   netfrontp = netobuf;
