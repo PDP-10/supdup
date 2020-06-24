@@ -421,7 +421,7 @@ main (int argc, char **argv)
   if (sp == 0)
     {
       fprintf (stderr, "supdup: tcp/supdup: unknown service.\n");
-      sp->s_port = 79; // standard
+      sp->s_port = 95; // standard
     }
 
 #if !USE_TERMIOS
