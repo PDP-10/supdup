@@ -421,7 +421,8 @@ main (int argc, char **argv)
   if (sp == 0)
     {
       fprintf (stderr, "supdup: tcp/supdup: unknown service.\n");
-      sp->s_port = 95; // standard
+      sp = (struct servent *)malloc(sizeof(struct servent));
+      sp->s_port = htons(95); // standard
     }
 
 #if !USE_TERMIOS
@@ -630,7 +631,7 @@ main (int argc, char **argv)
   }
   } else {
 #endif
-  printf("Trying %s ...", inet_ntoa (tsin.sin_addr));
+    printf("Trying %s port %d ...", inet_ntoa (tsin.sin_addr), ntohs(tsin.sin_port));
   fflush (stdout);
   if (connect (net, (struct sockaddr *) &tsin, sizeof (tsin)) < 0)
 /* >> Should try other addresses here (like BSD telnet) #ifdef h_addr */
