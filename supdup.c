@@ -1396,6 +1396,9 @@ suprcv (void)
   int c;
   static int state = SR_DATA;
   static int y;
+  // The text until the first TDNOP should be shown in ASCII, without translation.
+  // See RFC 734, bottom of page 3, or SUPIN2 in SYSNET;SUPDUP > (for ITS).
+  static int greeting_done = 0;
 
   while (scc > 0)
     {
@@ -1411,7 +1414,7 @@ suprcv (void)
               if (currcol < columns)
                 {
                   currcol++;
-                  if(unicode_translation) {
+                  if(unicode_translation && greeting_done) {
                     char *s = charmap[c].utf8;
                     while(*s) {
                       *ttyfrontp++ = *s++;
@@ -1485,6 +1488,7 @@ suprcv (void)
                 tputs (clr_eol, columns - currcol, putch);
               continue;
             case TDNOP:
+	      greeting_done = 1;
               continue;
             case TDORS:         /* ignore interrupts and */
 	      if (debug) fprintf(stderr,"TDORS at %d %d\n", currline, currcol);
