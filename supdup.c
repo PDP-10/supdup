@@ -178,8 +178,11 @@ struct servent *sp;
 struct	tchars otc;
 struct	ltchars oltc;
 struct	sgttyb ottyb;
+// historically, this is really fast.
+unsigned int ispeed = 9600, ospeed = 9600;
 #else
 struct termios otio;
+speed_t ispeed, ospeed;
 #endif
 
 int mode(int);
@@ -429,8 +432,11 @@ main (int argc, char **argv)
   ioctl (0, TIOCGETP, (char *) &ottyb);
   ioctl (0, TIOCGETC, (char *) &otc);
   ioctl (0, TIOCGLTC, (char *) &oltc);
+  // @@@@ how do we get speed in this case? (doesn't really matter)
 #else
   tcgetattr(0, &otio);
+  ispeed = cfgetispeed(&otio);
+  ospeed = cfgetospeed(&otio);
 #endif
   setbuf (stdin, 0);
   setbuf (stdout, 0);
@@ -659,10 +665,9 @@ main (int argc, char **argv)
   exit (0);
 }
 
-#define	INIT_LEN	42	/* Number of bytes to send at initialization */
 static char inits[] =
   {
-    /* -wordcount,,0.  should always be -6 */
+    /* -wordcount,,0.  should always be -6 unless ispeed, ospeed and uname are there*/
     077,	077,	-6,	0,	0,	0,
     /* TCTYP variable.  Always 7 (supdup) */
     0,	0,	0,	0,	0,	7,
@@ -676,8 +681,29 @@ static char inits[] =
     /* auto scroll number of lines */
     0,	0,	0,	0,	0,	1,
     /* TTYSMT */
+    0,	0,	0,	0,	0,	0,
+    // ISPEED
+    0,	0,	0,	0,	0,	0,
+    // OSPEED
+    0,	0,	0,	0,	0,	0,
+    // UNAME
     0,	0,	0,	0,	0,	0
   };
+#define	INIT_LEN	(sizeof(inits)) // 42	/* Number of bytes to send at initialization */
+
+
+int sixbit(char c)
+{
+  if (islower(c)) c = toupper(c);
+  if (c >= 040 && c <= 0137)
+    return c-040;
+  else
+    return 0; // space
+}
+int unsixbit(char c)
+{
+  return c+040;
+}
 
 /*
  * Initialize the terminal description to be sent when the connection is
@@ -686,7 +712,7 @@ static char inits[] =
 void
 sup_term (void)
 {
-  int errret;
+  int errret, i;
 
   setupterm (0, 1, &errret);
   if (errret == -1)
@@ -750,6 +776,23 @@ sup_term (void)
   if ((delete_character || parm_dch) &&
       (insert_character || parm_ich))
     inits[14] |= 01;
+
+  if (ispeed != 0) {
+    for (i = 0; i < 6; i++)
+      inits[(7*6)+i] = (ispeed>>((5-i)*6)) & 077;
+  }
+  if (ospeed != 0) {
+    for (i = 0; i < 6; i++)
+      inits[(8*6)+i] = (ospeed>>((5-i)*6)) & 077;
+  }
+  char *uname = getenv("USER");
+  if (*uname != 0) {
+    int ulen = strlen(uname);
+    for (i = 0; i < ulen && i < 6; i++)
+      inits[(9*6)+i] = sixbit(uname[i]);
+  }
+  // note that we have 9 values being sent
+  inits[2] = -9;
 }
 
 #if !USE_TERMIOS
@@ -896,7 +939,7 @@ read_char (void)
 void
 supdup (char *loc)
 {
-  int c;
+  int c, ilen;
   int tin = fileno (stdin), tout = fileno (stdout);
   int on = 1;
 #if !USE_BSD_SELECT
@@ -906,8 +949,13 @@ supdup (char *loc)
   if (ioctl (net, FIONBIO, &on) < 0)
     perror("ioctl(FIONBIO)");
 
-  for (c = 0; c < INIT_LEN;)
-    *netfrontp++ = inits[c++];
+  // inits[0-5] is an AOBJN ptr for how many words follow
+  ilen = -inits[2]*6+6;
+  for (c = 0; c < ilen; c++) {
+    *netfrontp++ = inits[c] & 077;
+  }
+  if (debug) fprintf(stderr,"\r\n");
+  // netflush(0);
   /* [BV] AFTER inits! */
   if (*loc != '\0')
     do_setloc(loc);
@@ -1405,7 +1453,14 @@ suprcv (void)
       c = *sbp++ & 0377; scc--;
 //      if(c>=0&&c<128)
 //        printf("State: %d, Incoming: %d. Translation: %s\n", state, c, charmap[c].name);
-      if (debug) fprintf(stderr,"State: %d, Incoming: %#o. Translation: %s\n", state, c, charmap[c].name);
+      if (debug) {
+	if (c < 0200)
+	  fprintf(stderr,"State: %d, Incoming: %#o. Translation: %s\r\n", state, c, charmap[c].name);
+	else
+	  fprintf(stderr,"State: %d, Incoming: %#o (TD%s)\r\n", state, c,
+		  c == TDCRL ? "CRL" : c == TDNOP ? "NOP" : c == TDEOL ? "EOL" : c == TDCLR ? "CLR" : "xxx");
+	if (c == TDCLR) c = TDNOP;
+      }
       switch (state)
         {
         case SR_DATA:
