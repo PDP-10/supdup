@@ -661,7 +661,15 @@ main (int argc, char **argv)
     supdup (myloc);
   ttyoflush ();
   mode (0);
+  // cosmetics
+  if (clr_eol)
+    tputs (clr_eol, columns, putch);
+  ttyoflush ();
   fprintf (stderr, "Connection closed by %s.\n", hostname);
+  // cosmetics
+  if (clr_eol)
+    tputs (clr_eol, columns, putch);
+  ttyoflush ();
   exit (0);
 }
 
@@ -1404,7 +1412,14 @@ punt (int logout_p)
   if (connected)
     {
       shutdown (net, 2);
+      // cosmetics
+      if (clr_eol)
+	tputs (clr_eol, columns, putch);
+      ttyoflush ();
       printf ("Connection closed.\n");
+      // cosmetics
+      if (clr_eol)
+	tputs (clr_eol, columns, putch);
       ttyoflush ();
       close (net);
     }
