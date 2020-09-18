@@ -340,6 +340,31 @@ chaos_connect(char *host, char *contact)
     }
   }
 }
+
+char *
+get_chaos_host(char *name)
+{
+  int naddrs = 0;
+  u_short haddrs[4];
+
+  // this is just to see it's really a Chaos host
+  if ((sscanf(name, "%ho", &haddrs[0]) == 1) && 
+      (haddrs[0] > 0xff) && (haddrs[0] < 0xfe00) && ((haddrs[0] & 0xff) != 0)) {
+    // Use the address for a "name": it is precise, and it works with the cbridge parser
+    return name;
+  }
+  else if ((naddrs = dns_addrs_of_name((u_char *)name, (u_short *)&haddrs, 4)) > 0) {
+    return name;
+  } else if (index(name, '.') == NULL) {
+    char buf[256];
+    sprintf(buf, "%s.%s", name, CHAOS_NAME_DOMAIN);
+    if (dns_addrs_of_name((u_char *)buf, (u_short *)&haddrs, 4) > 0) {
+      return strdup(buf);
+    }
+  } 
+  // not a Chaos host
+  return NULL;
+}
 #endif // USE_CHAOS_STREAM_SOCKET
 
 int putch (int c)
@@ -380,32 +405,13 @@ void
 get_host (char *name)
 {
 #if USE_CHAOS_STREAM_SOCKET
-  int naddrs = 0;
-  u_short haddrs[4];
-
-  // this is just to see it's really a Chaos host
-  if ((sscanf(name, "%ho", &haddrs[0]) == 1) && 
-      (haddrs[0] > 0xff) && (haddrs[0] < 0xfe00) && ((haddrs[0] & 0xff) != 0)) {
-    // Use the address for a "name": it is precise, and it works with the cbridge parser
-    hostname = name;
+  if ((hostname = get_chaos_host(name)) != NULL) {
     chaosp = 1;
+    // done here, hostname is now the host to connect to.
     return;
-  }
-  else if ((naddrs = dns_addrs_of_name((u_char *)name, (u_short *)&haddrs, 4)) > 0) {
-    hostname = name;
-    chaosp = 1;
-    return;
-  } else if (index(name, '.') == NULL) {
-    char buf[256];
-    sprintf(buf, "%s.%s", name, CHAOS_NAME_DOMAIN);
-    if (dns_addrs_of_name((u_char *)buf, (u_short *)&haddrs, 4) > 0) {
-      hostname = strdup(buf);
-      chaosp = 1;
-      return;
-    }
-  }
-  // It wasn't a Chaos name/address, try regular Internet
-  chaosp = 0;
+  } else
+    // It wasn't a Chaos name/address, try regular Internet
+    chaosp = 0;
 #endif
 
   struct hostent *host;
@@ -575,7 +581,11 @@ main (int argc, char **argv)
     }
   else if (argc > 3)
     {
+#if USE_CHAOS_STREAM_SOCKET
+      fprintf(stderr,"usage: %s host-name [port-or-contact] [-scroll]\n", argv[0]);
+#else
       fprintf(stderr,"usage: %s host-name [port] [-scroll]\n", argv[0]);
+#endif
       exit(1);
     }
   else
@@ -965,7 +975,6 @@ supdup (char *loc)
   for (c = 0; c < ilen; c++) {
     *netfrontp++ = inits[c] & 077;
   }
-  if (debug) fprintf(stderr,"\r\n");
   // netflush(0);
   /* [BV] AFTER inits! */
   if (*loc != '\0')
