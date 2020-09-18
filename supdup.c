@@ -190,15 +190,19 @@ void ttyoflush(void);
 
 #if USE_CHAOS_STREAM_SOCKET
 
+// Where are the chaos sockets? Cf. https://github.com/bictorv/chaosnet-bridge
 #ifndef CHAOS_SOCKET_DIRECTORY
 #define CHAOS_SOCKET_DIRECTORY "/tmp"
 #endif
+// What DNS domain should be used to translate Chaos addresses to names?
 #ifndef CHAOS_ADDRESS_DOMAIN
 #define CHAOS_ADDRESS_DOMAIN "ch-addr.net"
 #endif
+// What is the default DNS domain for Chaosnet names?
 #ifndef CHAOS_NAME_DOMAIN
 #define CHAOS_NAME_DOMAIN "chaosnet.net"
 #endif
+// What DNS server should be used to fetch Chaos class data?
 #ifndef CHAOS_DNS_SERVER
 #define CHAOS_DNS_SERVER "130.238.19.25"
 #endif
@@ -209,26 +213,13 @@ static int
 connect_to_named_socket(int socktype, char *path)
 {
   int sock, slen;
-  struct sockaddr_un local, server;
-  
-  local.sun_family = AF_UNIX;
-  sprintf(local.sun_path, "%s/%s_%d", CHAOS_SOCKET_DIRECTORY, path, getpid());
-  if (unlink(local.sun_path) < 0) {
-    //perror("unlink(chaos_sockfile)");
-  } 
+  struct sockaddr_un server;
   
   if ((sock = socket(AF_UNIX, socktype, 0)) < 0) {
     perror("socket(AF_UNIX)");
     exit(1);
   }
-  slen = strlen(local.sun_path)+ 1 + sizeof(local.sun_family);
-  if (bind(sock, (struct sockaddr *)&local, slen) < 0) {
-    perror("bind(local)");
-    exit(1);
-  }
-  if (chmod(local.sun_path, 0777) < 0)
-    perror("chmod(local, 0777)");
-  
+
   server.sun_family = AF_UNIX;
   sprintf(server.sun_path, "%s/%s", CHAOS_SOCKET_DIRECTORY, path);
   slen = strlen(server.sun_path)+ 1 + sizeof(server.sun_family);
@@ -267,7 +258,6 @@ init_chaos_dns()
 
 // given a domain name (including ending period!) and addr of a u_short vector,
 // fill in all Chaosnet addresses for it, and return the number of found addresses.
-// Use e.g. for verification when a new TLS conn is created (both server and client end?)
 int 
 dns_addrs_of_name(u_char *namestr, u_short *addrs, int addrs_len)
 {
@@ -324,6 +314,32 @@ dns_addrs_of_name(u_char *namestr, u_short *addrs, int addrs_len)
   }
   return ix;
 }
+
+int
+chaos_connect(char *host, char *contact) 
+{
+  dprintf(net, "RFC %s %s\r\n", host, contact);
+  netflush(0);
+  {
+    char buf[256], *bp, cbuf[2];
+    bp = buf;
+    while (read(net, cbuf, 1) == 1) {
+      if ((cbuf[0] != '\r') && (cbuf[0] != '\n'))
+	*bp++ = cbuf[0];
+      else {
+	*bp = '\0';
+	break;
+      }
+    }
+    if (strncmp(buf,"OPN ", 4) != 0) {
+      fprintf(stderr,"%s\n", buf);
+      return -1;
+    } else {
+      printf("%s\n", &buf[4]);
+      return 0;
+    }
+  }
+}
 #endif // USE_CHAOS_STREAM_SOCKET
 
 int putch (int c)
@@ -367,9 +383,10 @@ get_host (char *name)
   int naddrs = 0;
   u_short haddrs[4];
 
-  // this is just to see it's really a Chaos host - the address is not used in Supdup, only the name
+  // this is just to see it's really a Chaos host
   if ((sscanf(name, "%ho", &haddrs[0]) == 1) && 
       (haddrs[0] > 0xff) && (haddrs[0] < 0xfe00) && ((haddrs[0] & 0xff) != 0)) {
+    // Use the address for a "name": it is precise, and it works with the cbridge parser
     hostname = name;
     chaosp = 1;
     return;
@@ -387,6 +404,7 @@ get_host (char *name)
       return;
     }
   }
+  // It wasn't a Chaos name/address, try regular Internet
   chaosp = 0;
 #endif
 
@@ -614,27 +632,12 @@ main (int argc, char **argv)
   signal (SIGPIPE, deadpeer);
 #if USE_CHAOS_STREAM_SOCKET
   if (chaosp) {
-  printf("Trying %s %s...", hostname, contact);
-  fflush (stdout);
-  dprintf(net, "RFC %s %s\r\n", hostname, contact);
-  netflush(0);
-  {
-    char buf[256], *bp, cbuf[2];
-    bp = buf;
-    while (read(net, cbuf, 1) == 1) {
-      if ((cbuf[0] != '\r') && (cbuf[0] != '\n'))
-	*bp++ = cbuf[0];
-      else {
-	*bp = '\0';
-	break;
-      }
-    }
-    if (strncmp(buf,"OPN ", 4) != 0) {
-      fprintf(stderr,"%s\n", buf);
+    printf("Trying %s %s...", hostname, contact);
+    fflush (stdout);
+    if (chaos_connect(hostname, contact) < 0) {
+      signal(SIGINT, SIG_DFL);
       exit(1);
-    } else
-      printf("%s\n", &buf[4]);
-  }
+    }
   } else {
 #endif
     printf("Trying %s port %d ...", inet_ntoa (tsin.sin_addr), ntohs(tsin.sin_port));
