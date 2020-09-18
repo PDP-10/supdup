@@ -208,6 +208,7 @@ void ttyoflush(void);
 #endif
 
 static int chaosp = 0;
+static int chaos_socket = 0;
 
 static int
 connect_to_named_socket(int socktype, char *path)
@@ -225,8 +226,9 @@ connect_to_named_socket(int socktype, char *path)
   slen = strlen(server.sun_path)+ 1 + sizeof(server.sun_family);
 
   if (connect(sock, (struct sockaddr *)&server, slen) < 0) {
-    perror("connect(server)");
-    exit(1);
+    if (debug)
+      perror("connect(server)");
+    return 0;
   }
   return sock;
 }
@@ -348,6 +350,10 @@ get_chaos_host(char *name)
   u_short haddrs[4];
 
   // this is just to see it's really a Chaos host
+  if (chaos_socket == 0)
+    // but if we couldn't connect to cbridge, it's a moot point
+    return NULL;
+
   if ((sscanf(name, "%ho", &haddrs[0]) == 1) && 
       (haddrs[0] > 0xff) && (haddrs[0] < 0xfe00) && ((haddrs[0] & 0xff) != 0)) {
     // Use the address for a "name": it is precise, and it works with the cbridge parser
@@ -552,6 +558,8 @@ main (int argc, char **argv)
 
 #if USE_CHAOS_STREAM_SOCKET
   init_chaos_dns();
+  // Connect to the socket already here, to see whether parsing Chaos host names is relevant
+  chaos_socket = connect_to_named_socket(SOCK_STREAM, "chaos_stream");
 #endif
 
   if (argc == 1)
@@ -619,8 +627,8 @@ main (int argc, char **argv)
     }
 
 #if USE_CHAOS_STREAM_SOCKET
-  if (chaosp)
-    net = connect_to_named_socket(SOCK_STREAM, "chaos_stream");
+  if (chaosp && chaos_socket)
+    net = chaos_socket;
   else
 #endif
   net = socket (AF_INET, SOCK_STREAM, 0);
