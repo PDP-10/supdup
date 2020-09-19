@@ -1,4 +1,4 @@
-# Makefile for the supdup server and user.
+# Makefile for the supdup server and client.
 
 PREFIX ?= /usr/local
 
