@@ -2,10 +2,10 @@
 
 PREFIX ?= /usr/local
 
+CC = cc
 CFLAGS = -g -Wall
 LDFLAGS = -g
 LIBS = -lncurses
-CC = cc
 
 # The server isn't ready for prime time.
 all:	supdup
