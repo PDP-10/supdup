@@ -17,8 +17,8 @@ supdupd: supdupd.o
 	$(CC) $(LDFLAGS) -o $@ $^
 
 install: supdup
-	install -m 0755 supdup ${PREFIX}/bin
-	test -x supdupd && install -m 0755 supdupd ${PREFIX}/bin
+	install -m 0755 supdup $(PREFIX)/bin
+	test -x supdupd && install -m 0755 supdupd $(PREFIX)/bin
 
 clean:
 	rm -f *.o
