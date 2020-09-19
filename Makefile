@@ -5,13 +5,12 @@ PREFIX ?= /usr/local
 CC = cc
 CFLAGS = -g -Wall
 LDFLAGS = -g
-LIBS = -lncurses
 
 # The server isn't ready for prime time.
 all:	supdup
 
 supdup: supdup.o charmap.o
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+	$(CC) $(LDFLAGS) -o $@ $^ -lncurses
 
 supdupd: supdupd.o
 	$(CC) $(LDFLAGS) -o $@ $^
