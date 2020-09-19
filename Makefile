@@ -4,14 +4,13 @@ PREFIX ?= /usr/local
 
 CFLAGS = -g -Wall
 LDFLAGS = -g
-OBJS = supdup.o charmap.o
 LIBS = -lncurses
 CC = cc
 
 # The server isn't ready for prime time.
 all:	supdup
 
-supdup: $(OBJS)
+supdup: supdup.o charmap.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 supdupd: supdupd.o
