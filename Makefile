@@ -22,4 +22,5 @@ install: supdup supdupd
 	test -x supdupd && install -m 0755 supdupd ${PREFIX}/bin
 
 clean:
-	rm -f supdup supdupd $(OBJS)
+	rm -f *.o
+	rm -f supdup supdupd
