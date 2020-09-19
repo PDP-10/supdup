@@ -9,11 +9,13 @@ LDFLAGS = -g
 # The server isn't ready for prime time.
 all:	supdup
 
-supdup: supdup.o charmap.o
-	$(CC) $(LDFLAGS) -o $@ $^ -lncurses
+SUPDUP_OBJS = supdup.o charmap.o
+supdup: $(SUPDUP_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $(SUPDUP_OBJS) -lncurses
 
-supdupd: supdupd.o
-	$(CC) $(LDFLAGS) -o $@ $^
+SUPDUPD_OBJS = supdupd.o
+supdupd: $(SUPDUPD_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $(SUPDUPD_OBJS)
 
 install: supdup
 	install -m 0755 supdup $(PREFIX)/bin
