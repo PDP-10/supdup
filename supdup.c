@@ -694,7 +694,7 @@ main (int argc, char **argv)
   exit (0);
 }
 
-static char inits[] =
+static signed char inits[] =
   {
     /* -wordcount,,0.  should always be -6 unless ispeed, ospeed and uname are there*/
     077,	077,	-6,	0,	0,	0,
@@ -806,6 +806,7 @@ sup_term (void)
       (insert_character || parm_ich))
     inits[14] |= 01;
 
+#if 0 // @@@@ fixme later
   if (ispeed != 0) {
     for (i = 0; i < 6; i++)
       inits[(7*6)+i] = (ispeed>>((5-i)*6)) & 077;
@@ -822,6 +823,7 @@ sup_term (void)
   }
   // note that we have 9 values being sent
   inits[2] = -9;
+#endif
 }
 
 #if !USE_TERMIOS
