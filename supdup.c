@@ -179,10 +179,10 @@ struct	tchars otc;
 struct	ltchars oltc;
 struct	sgttyb ottyb;
 // historically, this is really fast.
-unsigned int ispeed = 9600, ospeed = 9600;
+unsigned int sup_ispeed = 9600, sup_ospeed = 9600;
 #else
 struct termios otio;
-speed_t ispeed, ospeed;
+speed_t sup_ispeed = 9600, sup_ospeed = 9600;
 #endif
 
 int mode(int);
@@ -444,6 +444,30 @@ get_host (char *name)
 }
 
 int
+to_bps(int speed)
+{
+  switch (speed) {
+  case B0: return 0;
+  case B50: return 50;
+  case B75: return 75;
+  case B110: return 110;
+  case B134: return 134;
+  case B150: return 150;
+  case B200: return 200;
+  case B300: return 300;
+  case B600: return 600;
+  case B1200: return 1200;
+  case B1800: return 1800;
+  case B2400: return 2400;
+  case B4800: return 4800;
+  case B9600: return 9600;
+  case B19200: return 19200;
+  case B38400: return 38400;
+  default: return 0;
+  }
+}
+
+int
 main (int argc, char **argv)
 {
   setlocale(LC_ALL, "");
@@ -463,10 +487,12 @@ main (int argc, char **argv)
   ioctl (0, TIOCGETC, (char *) &otc);
   ioctl (0, TIOCGLTC, (char *) &oltc);
   // @@@@ how do we get speed in this case? (doesn't really matter)
+  sup_ispeed = 9600;
+  sup_ospeed = 9600;
 #else
   tcgetattr(0, &otio);
-  ispeed = cfgetispeed(&otio);
-  ospeed = cfgetospeed(&otio);
+  sup_ispeed = to_bps(cfgetispeed(&otio));
+  sup_ospeed = to_bps(cfgetospeed(&otio));
 #endif
   setbuf (stdin, 0);
   setbuf (stdout, 0);
@@ -806,14 +832,13 @@ sup_term (void)
       (insert_character || parm_ich))
     inits[14] |= 01;
 
-#if 0 // @@@@ fixme later
-  if (ispeed != 0) {
+  if (sup_ispeed != 0) {
     for (i = 0; i < 6; i++)
-      inits[(7*6)+i] = (ispeed>>((5-i)*6)) & 077;
+      inits[(7*6)+i] = (sup_ispeed>>((5-i)*6)) & 077;
   }
-  if (ospeed != 0) {
+  if (sup_ospeed != 0) {
     for (i = 0; i < 6; i++)
-      inits[(8*6)+i] = (ospeed>>((5-i)*6)) & 077;
+      inits[(8*6)+i] = (sup_ospeed>>((5-i)*6)) & 077;
   }
   char *uname = getenv("USER");
   if (*uname != 0) {
@@ -822,8 +847,7 @@ sup_term (void)
       inits[(9*6)+i] = sixbit(uname[i]);
   }
   // note that we have 9 values being sent
-  inits[2] = -9;
-#endif
+  inits[2] = (signed char)-9;
 }
 
 #if !USE_TERMIOS
