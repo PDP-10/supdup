@@ -447,13 +447,16 @@ int
 to_bps(int speed)
 {
   switch (speed) {
+    // Cf. BAUDRT in SYSTEM;TS3TTY >
+    //case B75: return 75;
+    //case B134: return 134;
+    //case B200: return 200;
+    //case B19200: return 19200;
+    //case B38400: return 38400;
   case B0: return 0;
   case B50: return 50;
-  case B75: return 75;
   case B110: return 110;
-  case B134: return 134;
   case B150: return 150;
-  case B200: return 200;
   case B300: return 300;
   case B600: return 600;
   case B1200: return 1200;
@@ -461,9 +464,8 @@ to_bps(int speed)
   case B2400: return 2400;
   case B4800: return 4800;
   case B9600: return 9600;
-  case B19200: return 19200;
-  case B38400: return 38400;
-  default: return 0;
+    // reasonable default?
+  default: return 9600;
   }
 }
 
