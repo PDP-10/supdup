@@ -1517,9 +1517,12 @@ suprcv (void)
 //      if(c>=0&&c<128)
 //        printf("State: %d, Incoming: %d. Translation: %s\n", state, c, charmap[c].name);
       if (debug) {
-	if (c < 0200)
-	  fprintf(stderr,"State: %d, Incoming: %#o. Translation: %s\r\n", state, c, charmap[c].name);
-	else
+	if (c < 0200) {
+	  if (greeting_done)
+	    fprintf(stderr,"State: %d, Incoming: %#o. Translation: %s\r\n", state, c, charmap[c].name);
+	  else
+	    fprintf(stderr,"State: %d, Incoming: %#o.\r\n", state, c);
+	} else
 	  fprintf(stderr,"State: %d, Incoming: %#o (TD%s)\r\n", state, c,
 		  c == TDCRL ? "CRL" : c == TDNOP ? "NOP" : c == TDEOL ? "EOL" : c == TDCLR ? "CLR" : "xxx");
 	if (c == TDCLR) c = TDNOP;
