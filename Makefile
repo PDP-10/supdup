@@ -2,16 +2,26 @@
 
 PREFIX ?= /usr/local
 
+OS_NAME = $(shell uname)
+ifeq ($(OS_NAME), Darwin)
+OS = OSX
+endif
+
 CC = cc
 CFLAGS = -g -Wall
 LDFLAGS = -g
+
+# Mac OSX
+ifeq ($(OS), OSX)
+LDFLAGS = -L/opt/local/lib
+endif
 
 # The server isn't ready for prime time.
 all:	supdup
 
 SUPDUP_OBJS = supdup.o charmap.o
 supdup: $(SUPDUP_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(SUPDUP_OBJS) -lncurses
+	$(CC) $(LDFLAGS) -o $@ $(SUPDUP_OBJS) -lncurses -lresolv
 
 SUPDUPD_OBJS = supdupd.o
 supdupd: $(SUPDUPD_OBJS)
