@@ -16,12 +16,21 @@ ifeq ($(OS), OSX)
 LDFLAGS = -L/opt/local/lib
 endif
 
+# FreeBSD
+#
+# In FreeBSD, the functions found in libresolv on other systems
+# are in libc.
+#
+ifneq ($(OS), FreeBSD)
+RESOLVERLIB = -lresolv
+endif
+
 # The server isn't ready for prime time.
 all:	supdup
 
 SUPDUP_OBJS = supdup.o charmap.o
 supdup: $(SUPDUP_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(SUPDUP_OBJS) -lncurses -lresolv
+	$(CC) $(LDFLAGS) -o $@ $(SUPDUP_OBJS) -lncurses $(RESOLVERLIB)
 
 SUPDUPD_OBJS = supdupd.o
 supdupd: $(SUPDUPD_OBJS)
