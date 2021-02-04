@@ -21,7 +21,7 @@ endif
 # In FreeBSD, the functions found in libresolv on other systems
 # are in libc.
 #
-ifneq ($(OS), FreeBSD)
+ifneq ($(OS_NAME), FreeBSD)
 RESOLVERLIB = -lresolv
 endif
 
