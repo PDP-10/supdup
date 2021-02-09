@@ -16,12 +16,12 @@ ifeq ($(OS), OSX)
 LDFLAGS = -L/opt/local/lib
 endif
 
-# FreeBSD
+# FreeBSD and OpenBSD
 #
-# In FreeBSD, the functions found in libresolv on other systems
-# are in libc.
+# In FreeBSD and OpenBSD, the functions found in libresolv on
+# other systems are in libc.
 #
-ifneq ($(OS_NAME), FreeBSD)
+ifeq (,$(filter $(OS_NAME),FreeBSD OpenBSD))
 RESOLVERLIB = -lresolv
 endif
 
