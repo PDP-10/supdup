@@ -97,7 +97,7 @@ int net;
 int showoptions = 0;
 int options;
 
-int debug = 0;
+static int debug = 0;
 FILE *tdebug_file = 0;	/* For debugging terminal output */
 FILE *indebug_file = 0;	/* For debugging network input */
 FILE *outdebug_file = 0;	/* For debugging network output */
