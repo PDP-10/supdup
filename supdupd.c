@@ -82,7 +82,7 @@ static struct	sockaddr_in sin = { AF_INET };
 #endif
 void reapchild (void);
 void doit (int f, struct sockaddr_in *who);
-void fatal (int f, char *msg);
+void fatalmsg (int f, char *msg);
 void fatalperror (int f, char *msg, int errn);
 void sup_options (int net);
 void supdup (int f, int p);
@@ -326,7 +326,7 @@ void doit (int f, struct sockaddr_in *who)
 
   p = open ("/dev/ptmx", O_RDWR, 0);
   if (p < 0)
-    fatal (f, "Couldn't get a pty");
+    fatalmsg (f, "Couldn't get a pty");
   if (grantpt(p) < 0)
     fatalperror (f, "grantpt", errno);
   if (unlockpt(p) < 0)
@@ -393,7 +393,7 @@ void doit (int f, struct sockaddr_in *who)
   /*NOTREACHED*/
 }
 
-void fatal (int f, char *msg)
+void fatalmsg (int f, char *msg)
 {
   char buf[BUFSIZ];
 
@@ -407,7 +407,7 @@ void fatalperror (int f, char *msg, int errn)
   char buf[BUFSIZ];
 
   (void) sprintf (buf, "%s: %s", msg, strerror(errn));
-  fatal (f, buf);
+  fatalmsg (f, buf);
 }
 
 static void sig_handler_cleanup(int sig) { cleanup(); }
