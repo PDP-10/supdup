@@ -6,6 +6,8 @@
  * with 4.2 BSD UNIX.
  */
 
+/* Hacked by Jeffrey H. Johnson, March 2021, to add portable strlcpy. */
+
 /* Hacked by Bjorn Victor, November 2010, to add function declarations
    to make it compile/run in some more environments.
    Hacked by Bjorn Victor, 2004-2005, to support termios (Linux) and location setting.
@@ -73,6 +75,7 @@
 
 #include "supdup.h"
 #include "charmap.h"
+#include "ostrlcpy.h"
 
 #define OUTSTRING_BUFSIZ 2048
 unsigned char *outstring;
@@ -561,7 +564,7 @@ main (int argc, char **argv)
 #ifdef __OpenBSD__
 	strlcpy(myloc, argv[1], sizeof(myloc));
 #else
-	strncpy(myloc, argv[1], sizeof(myloc));
+	ostrlcpy(myloc, argv[1], sizeof(myloc));
 #endif /* __OpenBSD__ */
 	argv++, argc--;
       } else {
@@ -1414,7 +1417,7 @@ setloc(void)
 #ifdef __OpenBSD__
   strlcpy(myloc,loc, sizeof(myloc));		/* save */
 #else
-  strcpy(myloc,loc);		/* save */
+  ostrlcpy(myloc,loc, sizeof(myloc));		/* save */
 #endif /* __OpenBSD__ */
   restore();    
 }
