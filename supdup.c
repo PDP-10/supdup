@@ -204,7 +204,8 @@ void ttyoflush(void);
 #endif
 // What DNS server should be used to fetch Chaos class data?
 #ifndef CHAOS_DNS_SERVER
-#define CHAOS_DNS_SERVER "130.238.19.25"
+// #define CHAOS_DNS_SERVER "130.238.19.25"
+#define CHAOS_DNS_SERVER "dns.chaosnet.net"
 #endif
 
 static int chaosp = 0;
@@ -247,14 +248,20 @@ init_chaos_dns()
   // make sure to make recursive requests
   statp->options |= RES_RECURSE;
   // change nameserver
-  if (inet_aton(CHAOS_DNS_SERVER, &statp->nsaddr_list[0].sin_addr) < 0) {
-    perror("inet_aton (chaos_dns_server does not parse)");
-    exit(1);
-  } else {
-    statp->nsaddr_list[0].sin_family = AF_INET;
-    statp->nsaddr_list[0].sin_port = htons(53);
-    statp->nscount = 1;
+  if (inet_aton(CHAOS_DNS_SERVER, &statp->nsaddr_list[0].sin_addr) <= 0) {
+    struct hostent *chdns;
+    if (((chdns = gethostbyname2(CHAOS_DNS_SERVER, AF_INET)) != NULL) 
+	&& (chdns->h_addrtype == AF_INET)) {
+      memcpy(&statp->nsaddr_list[0].sin_addr, chdns->h_addr_list[0], chdns->h_length);
+    } else {
+      perror("inet_aton/gethostbyname (chaos_dns_server does not parse)");
+      exit(1);
+    }
   }
+  statp->nsaddr_list[0].sin_family = AF_INET;
+  statp->nsaddr_list[0].sin_port = htons(53);
+  statp->nscount = 1;
+
   // what about the timeout? RES_TIMEOUT=5s, statp->retrans (RES_MAXRETRANS=30 s? ms?), ->retry (RES_DFLRETRY=2, _MAXRETRY=5)
 }
 
