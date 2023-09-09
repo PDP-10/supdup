@@ -362,7 +362,7 @@ get_chaos_host(char *name)
     return NULL;
 
   if ((sscanf(name, "%ho", &haddrs[0]) == 1) && 
-      (haddrs[0] > 0xff) && (haddrs[0] < 0xfe00) && ((haddrs[0] & 0xff) != 0)) {
+      (haddrs[0] > 0xff) && ((haddrs[0] & 0xff) != 0)) {
     // Use the address for a "name": it is precise, and it works with the cbridge parser
     return name;
   }
