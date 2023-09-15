@@ -74,9 +74,6 @@
 #include "supdup.h"
 #include "charmap.h"
 
-#define OUTSTRING_BUFSIZ 2048
-unsigned char *outstring;
-
 #define TBUFSIZ 1024
 unsigned char ttyobuf[TBUFSIZ];
 unsigned char *ttyfrontp = ttyobuf;
@@ -671,12 +668,6 @@ main (int argc, char **argv)
     {
       perror ("supdup: socket");
       exit(1);
-    }
-  outstring = (unsigned char *) malloc (OUTSTRING_BUFSIZ);
-  if (outstring == 0)
-    {
-      fprintf (stderr, "Memory exhausted.\n");
-      exit (1);
     }
   sup_term ();
   if (debug && setsockopt (net, SOL_SOCKET, SO_DEBUG, 0, 0) < 0)
