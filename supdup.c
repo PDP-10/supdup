@@ -30,10 +30,6 @@
  *  Try multiple other host addresses if first fails.
  */
 
-#ifndef USE_CHAOS_STREAM_SOCKET
-#define USE_CHAOS_STREAM_SOCKET 1
-#endif
-
 #ifndef USE_TERMIOS
 #define USE_TERMIOS 1		/* e.g. Linux */
 #endif
@@ -41,19 +37,8 @@
 #define USE_BSD_SELECT 0	/* not e.g. Linux */
 #endif
 
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-#if USE_CHAOS_STREAM_SOCKET
-#include <sys/un.h>
-#include <sys/stat.h>
-#include <arpa/nameser.h>
-#include <resolv.h>
-#endif
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -64,7 +49,6 @@
 #include <errno.h>
 #include <signal.h>
 #include <setjmp.h>
-#include <netdb.h>
 
 #include <curses.h>
 #include <term.h>
@@ -90,6 +74,10 @@ char myloc[128];
 
 /* fd of network connection */
 int net;
+
+/* Which networks to use. */
+static int chaosp;
+static int tcpp;
 
 int showoptions = 0;
 int options;
@@ -162,14 +150,11 @@ struct cmd cmdtab[] =
 
 int currcol, currline;	/* Current cursor position */
 
-struct sockaddr_in tsin;
-
 void sup_term(void);
 void supdup (char *loc);
 void intr(int), deadpeer(int);
 char *key_name(int);
 struct cmd *getcmd(void);
-struct servent *sp;
 
 #if !USE_TERMIOS
 struct	tchars otc;
@@ -184,198 +169,6 @@ speed_t sup_ispeed = 9600, sup_ospeed = 9600;
 
 int mode(int);
 void ttyoflush(void);
-
-#if USE_CHAOS_STREAM_SOCKET
-
-// Where are the chaos sockets? Cf. https://github.com/bictorv/chaosnet-bridge
-#ifndef CHAOS_SOCKET_DIRECTORY
-#define CHAOS_SOCKET_DIRECTORY "/tmp"
-#endif
-// What DNS domain should be used to translate Chaos addresses to names?
-#ifndef CHAOS_ADDRESS_DOMAIN
-#define CHAOS_ADDRESS_DOMAIN "ch-addr.net"
-#endif
-// What is the default DNS domain for Chaosnet names?
-#ifndef CHAOS_NAME_DOMAIN
-#define CHAOS_NAME_DOMAIN "chaosnet.net"
-#endif
-// What DNS server should be used to fetch Chaos class data?
-#ifndef CHAOS_DNS_SERVER
-// #define CHAOS_DNS_SERVER "130.238.19.25"
-#define CHAOS_DNS_SERVER "dns.chaosnet.net"
-#endif
-
-static int chaosp = 0;
-static int chaos_socket = 0;
-
-static int
-connect_to_named_socket(int socktype, char *path)
-{
-  int sock, slen;
-  struct sockaddr_un server;
-  
-  if ((sock = socket(AF_UNIX, socktype, 0)) < 0) {
-    perror("socket(AF_UNIX)");
-    exit(1);
-  }
-
-  server.sun_family = AF_UNIX;
-  sprintf(server.sun_path, "%s/%s", CHAOS_SOCKET_DIRECTORY, path);
-  slen = strlen(server.sun_path)+ 1 + sizeof(server.sun_family);
-
-  if (connect(sock, (struct sockaddr *)&server, slen) < 0) {
-    if (debug)
-      perror("connect(server)");
-    return 0;
-  }
-  return sock;
-}
-
-struct __res_state chres;
-void
-init_chaos_dns()
-{
-  res_state statp = &chres;
-
-  // initialize resolver library
-  if (res_ninit(statp) < 0) {
-    fprintf(stderr,"Can't init statp\n");
-    exit(1);
-  }
-  // make sure to make recursive requests
-  statp->options |= RES_RECURSE;
-  // change nameserver
-  if (inet_aton(CHAOS_DNS_SERVER, &statp->nsaddr_list[0].sin_addr) <= 0) {
-    struct hostent *chdns;
-    if (((chdns = gethostbyname2(CHAOS_DNS_SERVER, AF_INET)) != NULL) 
-	&& (chdns->h_addrtype == AF_INET)) {
-      memcpy(&statp->nsaddr_list[0].sin_addr, chdns->h_addr_list[0], chdns->h_length);
-    } else {
-      perror("inet_aton/gethostbyname (chaos_dns_server does not parse)");
-      exit(1);
-    }
-  }
-  statp->nsaddr_list[0].sin_family = AF_INET;
-  statp->nsaddr_list[0].sin_port = htons(53);
-  statp->nscount = 1;
-
-  // what about the timeout? RES_TIMEOUT=5s, statp->retrans (RES_MAXRETRANS=30 s? ms?), ->retry (RES_DFLRETRY=2, _MAXRETRY=5)
-}
-
-// given a domain name (including ending period!) and addr of a u_short vector,
-// fill in all Chaosnet addresses for it, and return the number of found addresses.
-int 
-dns_addrs_of_name(u_char *namestr, u_short *addrs, int addrs_len)
-{
-  res_state statp = &chres;
-  char a_dom[NS_MAXDNAME];
-  int a_addr;
-  char qstring[NS_MAXDNAME];
-  u_char answer[NS_PACKETSZ];
-  int anslen;
-  ns_msg m;
-  ns_rr rr;
-  int i, ix = 0, offs;
-
-  sprintf(qstring,"%s.", namestr);
-
-  if ((anslen = res_nquery(statp, qstring, ns_c_chaos, ns_t_a, (u_char *)&answer, sizeof(answer))) < 0) {
-    // fprintf(stderr,"DNS: addrs of %s failed, errcode %d: %s\n", qstring, statp->res_h_errno, hstrerror(statp->res_h_errno));
-    return -1;
-  }
-
-  if (ns_initparse((u_char *)&answer, anslen, &m) < 0) {
-    fprintf(stderr,"ns_init_parse failure code %d",statp->res_h_errno);
-    return -1;
-  }
-
-  if (ns_msg_getflag(m, ns_f_rcode) != ns_r_noerror) {
-    // if (trace_dns) 
-    fprintf(stderr,"DNS: bad response code %d\n", ns_msg_getflag(m, ns_f_rcode));
-    return -1;
-  }
-  if (ns_msg_count(m, ns_s_an) < 1) {
-    // if (trace_dns) 
-    fprintf(stderr,"DNS: bad answer count %d\n", ns_msg_count(m, ns_s_an));
-    return -1;
-  }
-  for (i = 0; i < ns_msg_count(m, ns_s_an); i++) {
-    if (ns_parserr(&m, ns_s_an, i, &rr) < 0) { 
-      // if (trace_dns)
-      fprintf(stderr,"DNS: failed to parse answer RR %d\n", i);
-      return -1;
-    }
-    if (ns_rr_type(rr) == ns_t_a) {
-      if (((offs = dn_expand(ns_msg_base(m), ns_msg_end(m), ns_rr_rdata(rr), (char *)&a_dom, sizeof(a_dom))) < 0)
-	  ||
-	  ((a_addr = ns_get16(ns_rr_rdata(rr)+offs)) < 0))
-	return -1;
-      if (strncasecmp(a_dom, CHAOS_ADDRESS_DOMAIN, strlen(CHAOS_ADDRESS_DOMAIN)) == 0) {
-	// only use addresses in "our" address domain
-	if (ix < addrs_len) {
-	  addrs[ix++] = a_addr;
-	}
-      } 
-    } 
-  }
-  return ix;
-}
-
-int
-chaos_connect(char *host, char *contact) 
-{
-  dprintf(net, "RFC %s %s\r\n", host, contact);
-  netflush(0);
-  {
-    char buf[256], *bp, cbuf[2];
-    bp = buf;
-    while (read(net, cbuf, 1) == 1) {
-      if ((cbuf[0] != '\r') && (cbuf[0] != '\n'))
-	*bp++ = cbuf[0];
-      else {
-	*bp = '\0';
-	break;
-      }
-    }
-    if (strncmp(buf,"OPN ", 4) != 0) {
-      fprintf(stderr,"%s\n", buf);
-      return -1;
-    } else {
-      printf("%s\n", &buf[4]);
-      return 0;
-    }
-  }
-}
-
-char *
-get_chaos_host(char *name)
-{
-  int naddrs = 0;
-  u_short haddrs[4];
-
-  // this is just to see it's really a Chaos host
-  if (chaos_socket == 0)
-    // but if we couldn't connect to cbridge, it's a moot point
-    return NULL;
-
-  if ((sscanf(name, "%ho", &haddrs[0]) == 1) && 
-      (haddrs[0] > 0xff) && ((haddrs[0] & 0xff) != 0)) {
-    // Use the address for a "name": it is precise, and it works with the cbridge parser
-    return name;
-  }
-  else if ((naddrs = dns_addrs_of_name((u_char *)name, (u_short *)&haddrs, 4)) > 0) {
-    return name;
-  } else if (index(name, '.') == NULL) {
-    char buf[256];
-    sprintf(buf, "%s.%s", name, CHAOS_NAME_DOMAIN);
-    if (dns_addrs_of_name((u_char *)buf, (u_short *)&haddrs, 4) > 0) {
-      return strdup(buf);
-    }
-  } 
-  // not a Chaos host
-  return NULL;
-}
-#endif // USE_CHAOS_STREAM_SOCKET
 
 int putch (int c)
 {
@@ -406,46 +199,7 @@ void put_newline ()
 #define term_goto(c, l) \
   tputs (tparm (cursor_address, l, c), lines, putch)
 
-char *hostname;
-#if USE_CHAOS_STREAM_SOCKET
-char *contact = "SUPDUP";
-#endif
-
-void
-get_host (char *name)
-{
-#if USE_CHAOS_STREAM_SOCKET
-  if ((hostname = get_chaos_host(name)) != NULL) {
-    chaosp = 1;
-    // done here, hostname is now the host to connect to.
-    return;
-  } else
-    // It wasn't a Chaos name/address, try regular Internet
-    chaosp = 0;
-#endif
-
-  struct hostent *host;
-  host = gethostbyname (name);
-  if (host)
-    {
-      tsin.sin_family = host->h_addrtype;
-#ifdef notdef
-      bcopy (host->h_addr_list[0], (caddr_t) &tsin.sin_addr, host->h_length);
-#else
-      bcopy (host->h_addr, (caddr_t) &tsin.sin_addr, host->h_length);
-#endif /* h_addr */
-      hostname = host->h_name;
-    }
-  else
-    {
-      tsin.sin_family = AF_INET;
-      tsin.sin_addr.s_addr = inet_addr (name);
-      if (tsin.sin_addr.s_addr == -1)
-        hostname = 0;
-      else
-        hostname = name;
-    }
-}
+static const char *hostname;
 
 int
 to_bps(int speed)
@@ -473,20 +227,33 @@ to_bps(int speed)
   }
 }
 
+static int
+connection(const char *host, const char *port)
+{
+  int fd;
+  printf("Trying %s %s...", host, port != NULL ? port : "");
+  fflush(stdout);
+  hostname = host;
+  if (chaosp) {
+    fd = chaos_connect(host, port);
+    if (fd != -1)
+      return fd;
+  }
+  if (tcpp) {
+    fd = tcp_connect(host, port);
+    if (fd != -1)
+      return fd;
+  }
+  hostname = NULL;
+  return -1;
+}
+
 int
 main (int argc, char **argv)
 {
   setlocale(LC_ALL, "");
 
   myloc[0] = '\0';
-
-  sp = getservbyname ("supdup", "tcp");
-  if (sp == 0)
-    {
-      fprintf (stderr, "supdup: tcp/supdup: unknown service.\n");
-      sp = (struct servent *)malloc(sizeof(struct servent));
-      sp->s_port = htons(95); // standard
-    }
 
 #if !USE_TERMIOS
   ioctl (0, TIOCGETP, (char *) &ottyb);
@@ -588,11 +355,26 @@ main (int argc, char **argv)
       unicode_translation = 0;
     }
 
-#if USE_CHAOS_STREAM_SOCKET
-  init_chaos_dns();
-  // Connect to the socket already here, to see whether parsing Chaos host names is relevant
-  chaos_socket = connect_to_named_socket(SOCK_STREAM, "chaos_stream");
-#endif
+  if (argc > 1 && !strcmp(argv[1], "-C"))
+    {
+      argv++;
+      argc--;
+      chaosp = 1;
+    }
+
+  if (argc > 1 && !strcmp(argv[1], "-T"))
+    {
+      argv++;
+      argc--;
+      tcpp = 1;
+    }
+
+  if (!chaosp && !tcpp)
+    {
+      /* No network type specified, try everything. */
+      chaosp = 1;
+      tcpp = 1;
+    }
 
   if (argc == 1)
     {
@@ -612,8 +394,8 @@ main (int argc, char **argv)
         }
       if ((cp = strchr(line, '\n')))
 	*cp = '\0';
-      get_host (line);
-      if (!hostname)
+      net = connection(line, NULL);
+      if (net < 0)
         {
           printf ("%s: unknown host.\n", line);
           goto again;
@@ -622,80 +404,28 @@ main (int argc, char **argv)
   else if (argc > 3)
     {
 #if USE_CHAOS_STREAM_SOCKET
-      fprintf(stderr,"usage: %s host-name [port-or-contact] [-scroll]\n", argv[0]);
+      fprintf(stderr,"usage: %s [-dstuCT] host-name [port-or-contact] [-scroll]\n", argv[0]);
 #else
-      fprintf(stderr,"usage: %s host-name [port] [-scroll]\n", argv[0]);
+      fprintf(stderr,"usage: %s [-dstuCT] host-name [port] [-scroll]\n", argv[0]);
 #endif
       exit(1);
     }
   else
     {
-      get_host (argv[1]);
-      if (!hostname)
+      net = connection(argv[1], argc == 3 ? argv[2] : NULL);
+      if (net < 0)
         {
           fprintf(stderr,"%s: unknown host.\n", argv[1]);
           exit (1);
         }
     }
 
-  tsin.sin_port = sp->s_port;
-  if (argc == 3)
-    {
-#if USE_CHAOS_STREAM_SOCKET
-      if (chaosp)
-	contact = argv[2];
-      else {
-#endif
-      tsin.sin_port = atoi (argv[2]);
-      if (tsin.sin_port <= 0)
-        {
-          fprintf(stderr,"%s: bad port number.\n", argv[2]);
-          exit(1);
-        }
-      tsin.sin_port = htons (tsin.sin_port);
-#if USE_CHAOS_STREAM_SOCKET
-      }
-#endif
-    }
-
-#if USE_CHAOS_STREAM_SOCKET
-  if (chaosp && chaos_socket)
-    net = chaos_socket;
-  else
-#endif
-  net = socket (AF_INET, SOCK_STREAM, 0);
-  if (net < 0)
-    {
-      perror ("supdup: socket");
-      exit(1);
-    }
   sup_term ();
   if (debug && setsockopt (net, SOL_SOCKET, SO_DEBUG, 0, 0) < 0)
     perror ("setsockopt (SO_DEBUG)");
   signal (SIGINT, intr);
   signal (SIGPIPE, deadpeer);
-#if USE_CHAOS_STREAM_SOCKET
-  if (chaosp) {
-    printf("Trying %s %s...", hostname, contact);
-    fflush (stdout);
-    if (chaos_connect(hostname, contact) < 0) {
-      signal(SIGINT, SIG_DFL);
-      exit(1);
-    }
-  } else {
-#endif
-    printf("Trying %s port %d ...", inet_ntoa (tsin.sin_addr), ntohs(tsin.sin_port));
-  fflush (stdout);
-  if (connect (net, (struct sockaddr *) &tsin, sizeof (tsin)) < 0)
-/* >> Should try other addresses here (like BSD telnet) #ifdef h_addr */
-    {
-      perror ("supdup: connect");
-      signal (SIGINT, SIG_DFL);
-      exit(1);
-    }
-#if USE_CHAOS_STREAM_SOCKET
-  }
-#endif
+
   connected = 1;
   printf ("Connected to %s.\n", hostname);
   printf ("Escape character is \"%s\".", key_name (escape_char));
