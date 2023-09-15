@@ -109,3 +109,9 @@ char ttyopt[6];
 #define TPPRN	(ttyopt[4] & 2)		/* Swap parens and brackets (ignored)*/
 short ttyrol;	/* How much the terminal scrolls by */
 
+#ifndef USE_CHAOS_STREAM_SOCKET
+#define USE_CHAOS_STREAM_SOCKET 1
+#endif
+
+extern int chaos_connect(const char *host, const char *contact);
+extern int tcp_connect(const char *host, const char *port);

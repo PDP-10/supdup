@@ -19,9 +19,9 @@ endif
 # The server isn't ready for prime time.
 all:	supdup
 
-SUPDUP_OBJS = supdup.o charmap.o
+SUPDUP_OBJS = supdup.o charmap.o tcp.o chaos.o
 supdup: $(SUPDUP_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(SUPDUP_OBJS) -lncurses -lresolv
+	$(CC) $(LDFLAGS) -o $@ $(SUPDUP_OBJS) -lncurses
 
 SUPDUPD_OBJS = supdupd.o
 supdupd: $(SUPDUPD_OBJS)
