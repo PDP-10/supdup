@@ -234,11 +234,13 @@ connection(const char *host, const char *port)
   printf("Trying %s %s...", host, port != NULL ? port : "");
   fflush(stdout);
   hostname = host;
+#if USE_CHAOS_STREAM_SOCKET
   if (chaosp) {
     fd = chaos_connect(host, port);
     if (fd != -1)
       return fd;
   }
+#endif
   if (tcpp) {
     fd = tcp_connect(host, port);
     if (fd != -1)
