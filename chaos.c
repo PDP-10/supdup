@@ -1,5 +1,7 @@
 /* Chaosnet specific code, pulled out from supdup.c. */
 
+#include "supdup.h"
+
 #if USE_CHAOS_STREAM_SOCKET
 
 #include <stdio.h>

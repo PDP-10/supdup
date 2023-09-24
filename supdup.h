@@ -94,21 +94,6 @@
 
 #define TDUP	0237	/* Interpreted locally, not in supdup spec at all */
 
-/* These variables are set at initial connection time */
-char ttyopt[6];
-#define TOERS	(ttyopt[0] & 4)		/* Terminal can erase */
-#define TOMVB	(ttyopt[0] & 1)		/* can move backwards */
-#define TOOVR	(ttyopt[1] & 010)	/* Over printing */
-#define TOMVU	(ttyopt[1] & 4)		/* can move up */
-#define TOFCI	(ttyopt[2] & 010)	/* Terminal can transmit full 12-bit MIT ascii */
-#define TOLID	(ttyopt[2] & 2)		/* Line insert/delete */
-#define TOCID	(ttyopt[2] & 1)		/* Character insert/delete */
-#define TOSA1	(ttyopt[1] & 020)	/* send SAIL characters direct */
-#define TOMOR	(ttyopt[1] & 2)		/* Do more processing */
-#define TOROL	(ttyopt[1] & 1)		/* Do scrolling */
-#define TPPRN	(ttyopt[4] & 2)		/* Swap parens and brackets (ignored)*/
-short ttyrol;	/* How much the terminal scrolls by */
-
 #ifndef USE_CHAOS_STREAM_SOCKET
 #define USE_CHAOS_STREAM_SOCKET 1
 #endif
