@@ -1,7 +1,5 @@
 /* Chaosnet specific code, pulled out from supdup.c. */
 
-#if USE_CHAOS_STREAM_SOCKET
-
 #include <stdio.h>
 #include <netdb.h>
 #include <unistd.h>
@@ -117,15 +115,3 @@ chaos_connect(const char *hostname, const char *contact)
   }
   return fd;
 }
-
-#else /* !USE_CHAOS_STREAM_SOCKET */
-
-int
-chaos_connect(const char *hostname, const char *contact)
-{
-  (void)hostname;
-  (void)contact;
-  return -1;
-}
-
-#endif /* !USE_CHAOS_STREAM_SOCKET */
