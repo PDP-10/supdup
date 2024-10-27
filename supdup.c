@@ -31,12 +31,13 @@
  */
 
 #ifndef USE_TERMIOS
-#define USE_TERMIOS 1		/* e.g. Linux */
+#define USE_TERMIOS 1		/* e.g. Linux, SysV */
 #endif
 #ifndef USE_BSD_SELECT
-#define USE_BSD_SELECT 0	/* not e.g. Linux */
+#define USE_BSD_SELECT 0	/* e.g. not Linux, SysV */
 #endif
 
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 
@@ -50,10 +51,15 @@
 #include <signal.h>
 #include <setjmp.h>
 
-#include <curses.h>
+#include <ncurses.h>
 #include <term.h>
 #include <locale.h>
 #include <langinfo.h>
+
+#ifdef __sun
+#include <sys/filio.h>
+#include <sys/ioctl.h>
+#endif
 
 #include "supdup.h"
 #include "charmap.h"
@@ -153,8 +159,12 @@ int currcol, currline;	/* Current cursor position */
 void sup_term(void);
 void supdup (char *loc);
 void intr(int), deadpeer(int);
-char *key_name(int);
+char *local_key_name(int);
 struct cmd *getcmd(void);
+
+#ifdef __HAIKU__
+#define speed_t unsigned int
+#endif
 
 #if !USE_TERMIOS
 struct	tchars otc;
@@ -178,7 +188,7 @@ int putch (int c)
 }
 
 
-void put_newline ()
+void put_newline (void)
 {
   if (newline)
     tputs (newline, 1, putch);
@@ -428,7 +438,7 @@ main (int argc, char **argv)
 
   connected = 1;
   printf ("Connected to %s.\n", hostname);
-  printf ("Escape character is \"%s\".", key_name (escape_char));
+  printf ("Escape character is \"%s\".", local_key_name (escape_char));
   fflush (stdout);
   mode (1);
   if (clr_eos)
@@ -629,7 +639,15 @@ mode (int f)
       tc = &notc;
       ltc = &noltc;
 #else
+#ifdef __sun
+      ntio.c_iflag &= ~(IMAXBEL|IGNBRK|BRKINT|PARMRK|ISTRIP|INLCR|IGNCR|ICRNL|IXON);
+      ntio.c_oflag &= ~OPOST;
+      ntio.c_lflag &= ~(ECHO|ECHONL|ICANON|ISIG|IEXTEN);
+      ntio.c_cflag &= ~(CSIZE|PARENB);
+      ntio.c_cflag |= CS8;
+#else
       cfmakeraw(&ntio);
+#endif
 #endif
       onoff = 1;
       break;
@@ -959,7 +977,7 @@ command (unsigned char chr)
     {
       clear_bottom_line ();
       printf ("?Invalid SUPDUP command \"%s\"",
-              key_name (chr));
+              local_key_name (chr));
       ttyoflush ();
       return;
     }
@@ -989,7 +1007,7 @@ status (void)
     printf(" (Console location: \"%s\")", myloc);
   ttyoflush ();
   put_newline ();
-  printf ("Escape character is \"%s\".", key_name (escape_char));
+  printf ("Escape character is \"%s\".", local_key_name (escape_char));
   ttyoflush ();
   /* eat space, or unread others */
   {
@@ -1030,7 +1048,7 @@ suspend (void)
   tcsetattr(0, TCSANOW, &otio);
 #endif
   (void) mode (save);
-  *netfrontp++ = ITP_ESCAPE;      /* Tell other end that it sould refresh */
+  *netfrontp++ = ITP_ESCAPE;      /* Tell other end that it should refresh */
   *netfrontp++ = ITP_PIATY;       /* the screen */
   restore ();
 }
@@ -1058,18 +1076,18 @@ help (void)
       
   ttyoflush ();
   printf ("Type \"%s\" followed by the command character.  Commands are:",
-          key_name (escape_char));
+          local_key_name (escape_char));
   ttyoflush ();
   put_newline ();
   printf (" %-8s%s",
-          key_name (escape_char),
+          local_key_name (escape_char),
           "sends escape character through");
   ttyoflush ();
   for (c = cmdtab; c->name; c++)
     {
       put_newline ();
       printf (" %-8s%s",
-              key_name (c->name),
+              local_key_name (c->name),
               c->help);
     }
   ttyoflush ();
@@ -1115,7 +1133,7 @@ setloc(void)
   else
     fprintf(stdout,"Set console location: ");
   ttyoflush();
-  for (i = 0; i < sizeof(loc); i++) {
+  for (i = 0; i < sizeof(loc)-1; i++) {
     c = read_char();
     if (c == Ctl ('g')) {	/* abort */
       restore ();
@@ -1557,12 +1575,12 @@ netflush (int dont_die)
 }
 
 
-char key_name_buffer[20];
+char local_key_name_buffer[20];
 
 char *
-key_name (int c)
+local_key_name (int c)
 {
-  char *p = key_name_buffer;
+  char *p = local_key_name_buffer;
   if (c >= 0200)
     {
       *p++ = 'M';
@@ -1620,17 +1638,19 @@ key_name (int c)
   else
     *p++ = c;
   *p++ = 0;
-  return (key_name_buffer);
+  return (local_key_name_buffer);
 }
 
 void deadpeer(int sig)
 {
+  (void)sig;
   mode (0);
   longjmp (peerdied, -1);
 }
 
 void intr (int sig)
 {
+  (void)sig;
   mode (0);
   exit (1);
 }
@@ -1653,7 +1673,7 @@ setescape (void)
   ttyoflush ();
   escape_char = read_char ();
   clear_bottom_line ();
-  printf ("Escape character is \"%s\".", key_name (escape_char));
+  printf ("Escape character is \"%s\".", local_key_name (escape_char));
   ttyoflush ();
 }
 
@@ -1662,7 +1682,7 @@ setoptions (void)
 {
   showoptions = !showoptions;
   clear_bottom_line ();
-  printf ("%s show option processing.", showoptions ? "Will" : "Wont");
+  printf ("%s show option processing.", showoptions ? "Will" : "Won't");
   ttyoflush ();
 }
 #endif /* 0 */
@@ -1674,7 +1694,7 @@ setcrmod (void)
 {
   crmod = !crmod;
   clear_bottom_line ();
-  printf ("%s map carriage return on output.", crmod ? "Will" : "Wont");
+  printf ("%s map carriage return on output.", crmod ? "Will" : "Won't");
   ttyoflush ();
 }
 #endif /* 0 */
@@ -1685,7 +1705,7 @@ setdebug (void)
 {
   debug = !debug;
   clear_bottom_line ();
-  printf ("%s turn on socket level debugging.", debug ? "Will" : "Wont");
+  printf ("%s turn on socket level debugging.", debug ? "Will" : "Won't");
   if (debug && net > 0 && setsockopt (net, SOL_SOCKET, SO_DEBUG, 0, 0) < 0)
     perror ("setsockopt (SO_DEBUG)");
   ttyoflush ();

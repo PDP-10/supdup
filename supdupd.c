@@ -25,8 +25,18 @@
 /* #define TERMINFO 1 */	/* Define if want terminfo support. */
 				/* there should be a TERMCAP too */
 
-#define _XOPEN_SOURCE 500 /* for unlockpt and ptsname */
+#ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE
+#endif
+
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 500 /* for unlockpt and ptsname */
+#endif
+#if _XOPEN_SOURCE < 500
+#undef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 500
+#endif
+
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -172,7 +182,7 @@ void echo_char (unsigned char c)
 #ifdef DAEMON
 int main (int argc, char *argv[])
 {
-  int s, pid, options;
+  int s, pid, options = 0;
   struct servent *sp;
 
 #ifdef DEBUG
@@ -232,7 +242,7 @@ again:
       perror ("telnetd: setsockopt (SO_DEBUG)");
   if (setsockopt (s, SOL_SOCKET, SO_KEEPALIVE, 0, 0) < 0)
     perror ("supdupd: setsockopt (SO_KEEPALIVE)");
-  while (bind (s, (caddr_t) &sin, sizeof (sin)) < 0)
+  while (bind (s, (void *) &sin, sizeof (sin)) < 0)
     {
       perror ("supdupd: bind");
       sleep (5);
@@ -244,7 +254,7 @@ again:
       struct sockaddr_in from;
       int s2, fromlen = sizeof (from);
 
-      s2 = accept (s, (caddr_t)&from, &fromlen);
+      s2 = accept (s, (void *)&from, &fromlen);
       if (s2 < 0)
         {
           if (errno == EINTR)
@@ -270,6 +280,7 @@ int main (int argc, char *argv[])
 {
   struct sockaddr_in from;
   socklen_t fromlen = sizeof(from);
+  (void)argc;
 
 #ifdef DEBUG
   open_debug_output ();
@@ -425,7 +436,11 @@ void fatalperror (int f, char *msg, int errn)
   fatalmsg (f, buf);
 }
 
-static void sig_handler_cleanup(int sig) { cleanup(); }
+static void sig_handler_cleanup(int sig)
+{
+  (void)sig;
+  cleanup();
+}
 
 /*
  * Main loop.  Select from pty and network, and
@@ -871,21 +886,21 @@ void do_crlf (void)
 /* base state */
 #define RS_DATA		0
 
-/* recieved ITP_ESCAPE (034) Waiting for `m' */
+/* received ITP_ESCAPE (034) Waiting for `m' */
 #define	RS_ITP_ESCAPE	1
 /* received ITP_ESCAPE, `m'>#o100
    Waiting for `n'.
    Char will be (+ (* (- `m' #o100) #o200) `n') */
 #define RS_BUCKY	2
 
-/* Recived ITP_ESCAPE, ITP_FLOW_CONTROL_INCREASE
+/* Received ITP_ESCAPE, ITP_FLOW_CONTROL_INCREASE
    Ignore next char, since un*x can't hack real, winning, flow control */
 #define RS_FLOW_CONTROL_INCREASE 3
 
-/* Recived ITP_ESCAPE, ITP_CURSORPOS
+/* Received ITP_ESCAPE, ITP_CURSORPOS
    Waiting for `row' */
 #define RS_CURSORPOS_1	4
-/* Recived ITP_ESCAPE, ITP_CURSORPOS, `row'
+/* Received ITP_ESCAPE, ITP_CURSORPOS, `row'
    Waiting for `column' */
 #define RS_CURSORPOS_2	5
 
@@ -1247,7 +1262,7 @@ void sup_options (int net)
 {
   char temp[6];
   int count;
-  int tcmxh, tcmxv;
+  int tcmxh = 0, tcmxv = 0;
 
   read (net, temp, 6);          /* Read count */
   count = -((-1 << 6) | temp[2]);

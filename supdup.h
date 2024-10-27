@@ -42,7 +42,7 @@
 #define ITP_MTA		00400	/* META key depressed */
 #define ITP_TOP		04000	/* TOP key depressed */
 #define CTL_PREFIX	0237	/* c-m-_ is control prefix */
-#define ITP_CHAR(char1,char2) (((char1 & 037) << 7) + char2)
+#define ITP_CHAR(char1,char2) ((((char1) & 037) << 7) + (char2))
 #define ITP_ESCAPE	034	/* ITS ITP codes follow */
 
 #define ITP_CURSORPOS 020	/* user sends vpos/hpos */

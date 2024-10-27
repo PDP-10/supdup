@@ -658,7 +658,7 @@ doremoteterm(term, tp)
 	tp->sg_flags = ECHO|CRMOD|ANYP|XTABS;
 }
 
-#ifdef 0
+#if 0
 /* Use syslog instead */
 logerr(fmt, a1, a2, a3)
 	char *fmt, *a1, *a2, *a3;

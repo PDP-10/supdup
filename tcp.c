@@ -1,13 +1,20 @@
 /* TCP specific code, pulled out from supdup.c. */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <netdb.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "supdup.h"
+
+#if defined(_AIX) || defined(__sun)
+#undef bcopy
+#define bcopy(__src, __dst, __len) memcpy(__dst, __src, __len)
+#endif
 
 #define STANDARD_PORT 95  /*Per gospel from St. Postel.*/
 
@@ -21,8 +28,12 @@ get_port(struct sockaddr_in *tsin, const char *port)
     else
       tsin->sin_port = sp->s_port;
   } else {
+    if ((atoi (port) < 0) || (atoi (port) > 65535)) {
+      fprintf(stderr,"%s: bad port number.\n", port);
+      return -1;
+    }
     tsin->sin_port = atoi (port);
-    if (tsin->sin_port <= 0) {
+    if (tsin->sin_port == 0) {
       fprintf(stderr,"%s: bad port number.\n", port);
       return -1;
     }
@@ -40,9 +51,9 @@ get_host (struct sockaddr_in *tsin, const char *name)
     {
       tsin->sin_family = host->h_addrtype;
 #ifdef notdef
-      bcopy (host->h_addr_list[0], (caddr_t) &tsin->sin_addr, host->h_length);
+      bcopy (host->h_addr_list[0], (void *) &tsin->sin_addr, host->h_length);
 #else
-      bcopy (host->h_addr, (caddr_t) &tsin->sin_addr, host->h_length);
+      bcopy (host->h_addr, (void *) &tsin->sin_addr, host->h_length);
 #endif /* h_addr */
       return 0;
     }
