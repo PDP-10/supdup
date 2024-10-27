@@ -1,3 +1,6 @@
 *~
 *.o
+*.ln
+compile_commands.json
 /supdup
+/supdupd

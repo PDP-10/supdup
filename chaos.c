@@ -9,7 +9,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/un.h>
-#include <sys/errno.h>
+#include <errno.h>
+#include <sys/socket.h>
 
 // Where are the chaos sockets? Cf. https://github.com/bictorv/chaosnet-bridge
 #ifndef CHAOS_SOCKET_DIRECTORY
@@ -41,7 +42,7 @@ connect_to_named_socket(int socktype, char *path)
   slen = strlen(server.sun_path)+ 1 + sizeof(server.sun_family);
 
   if (connect(sock, (struct sockaddr *)&server, slen) < 0) {
-    if (errno != ECONNREFUSED)
+    if (errno != ENOENT)
       // Fail silently if Chaosnet bridge is not there
       perror("connect(server)");
     return -1;
@@ -114,7 +115,8 @@ chaos_connect(const char *hostname, const char *contact)
   if (contact == NULL)
     contact = "SUPDUP";
   if (connection(fd, hostname, contact) < 0) {
-    close(fd);
+    if (fd >= 0)
+      close(fd);
     return -1;
   }
   return fd;
