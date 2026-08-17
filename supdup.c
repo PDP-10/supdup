@@ -37,6 +37,10 @@
 #define USE_BSD_SELECT 0	/* e.g. not Linux, SysV */
 #endif
 
+#if USE_TERMIOS
+#include <termios.h>
+#endif
+
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
