@@ -11,10 +11,8 @@
 #include <arpa/inet.h>
 #include "supdup.h"
 
-#if defined(_AIX) || defined(__sun)
-#undef bcopy
-#define bcopy(__src, __dst, __len) memcpy(__dst, __src, __len)
-#endif
+/* Uncomment for SunOS 3.x, early Ultrix, and 4.2BSD (and older) */
+/* #define olddef */
 
 #define STANDARD_PORT 95  /*Per gospel from St. Postel.*/
 
@@ -50,8 +48,8 @@ get_host (struct sockaddr_in *tsin, const char *name)
   if (host)
     {
       tsin->sin_family = host->h_addrtype;
-#ifdef notdef
-      bcopy (host->h_addr_list[0], (void *) &tsin->sin_addr, host->h_length);
+#ifndef olddef
+      memcpy ((void *) &tsin->sin_addr, host->h_addr_list[0], host->h_length);
 #else
       bcopy (host->h_addr, (void *) &tsin->sin_addr, host->h_length);
 #endif /* h_addr */

@@ -37,6 +37,10 @@
 #define USE_BSD_SELECT 0	/* e.g. not Linux, SysV */
 #endif
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #if USE_TERMIOS
 #include <termios.h>
 #endif
